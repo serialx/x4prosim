@@ -8,7 +8,7 @@
  * To avoid getting into possible circular include dependencies, this
  * file should not include any other QEMU headers, with the exceptions
  * of config-host.h, config-target.h, qemu/compiler.h,
- * sysemu/os-posix.h, sysemu/os-win32.h, glib-compat.h and
+ * sysemu/os-posix.h, sysemu/os-win32.h, sysemu/os-wasm.h, glib-compat.h and
  * qemu/typedefs.h, all of which are doing a similar job to this file
  * and are under similar constraints.
  *
@@ -164,8 +164,12 @@ QEMU_EXTERN_C int daemon(int, int);
 #include "sysemu/os-win32.h"
 #endif
 
-#ifdef CONFIG_POSIX
+#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
 #include "sysemu/os-posix.h"
+#endif
+
+#if defined(EMSCRIPTEN)
+#include "sysemu/os-wasm.h"
 #endif
 
 #ifdef __cplusplus
