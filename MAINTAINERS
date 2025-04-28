@@ -617,6 +617,7 @@ S: Maintained
 F: include/sysemu/os-wasm.h
 F: os-wasm.c
 F: util/coroutine-wasm.c
+F: configs/meson/emscripten.txt
 
 Alpha Machines
 --------------
