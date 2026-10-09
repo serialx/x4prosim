@@ -33,6 +33,7 @@ system_ss.add(when: 'CONFIG_TCX', if_true: files('tcx.c'))
 system_ss.add(when: 'CONFIG_CG3', if_true: files('cg3.c'))
 system_ss.add(when: 'CONFIG_MACFB', if_true: files('macfb.c'))
 system_ss.add(when: 'CONFIG_NEXTCUBE', if_true: files('next-fb.c'))
+system_ss.add(when: 'CONFIG_ESP_RGB', if_true: files('esp_rgb.c'))
 
 system_ss.add(when: 'CONFIG_VGA', if_true: files('vga.c'))
 system_ss.add(when: 'CONFIG_VIRTIO', if_true: files('virtio-dmabuf.c'))
@@ -143,3 +144,5 @@ endif
 system_ss.add(when: 'CONFIG_OMAP', if_true: files('omap_lcdc.c'))
 
 modules += { 'hw-display': hw_display_modules }
+system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('ssd1677.c', 'uc8179.c'))
+system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('uc8279.c'))

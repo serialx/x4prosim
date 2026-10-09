@@ -21,6 +21,8 @@ config XTENSA_XTFPGA
     select SERIAL_MM
 
 config XTENSA_ESP32
+    select DWC_SDMMC
+    select ESP_RGB
     bool
     default y
     depends on XTENSA
@@ -32,6 +34,10 @@ config XTENSA_ESP32
     select LED
 
 config XTENSA_ESP32S3
+    select DWC_SDMMC
+    select ESP_RGB
+    select GT911
+    select SSI_SD
     bool
     default y
     depends on XTENSA

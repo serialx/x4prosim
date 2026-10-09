@@ -164,6 +164,8 @@ config K230
     select K230_WDT
 
 config RISCV_ESP32C3
+    select ESP_RGB
+    select SSI_M25P80
     bool
     default y
     depends on RISCV32
@@ -174,6 +176,8 @@ config RISCV_ESP32C3
     select I2C
 
 config RISCV_ESP32C6
+    select SSI
+    select SSI_M25P80
     bool
     default y
     depends on RISCV32

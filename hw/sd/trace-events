@@ -75,3 +75,6 @@ pl181_data_engine_idle(void) "data engine idle"
 # aspeed_sdhci.c
 aspeed_sdhci_read(uint64_t addr, uint32_t size, uint64_t data) "@0x%" PRIx64 " size %u: 0x%" PRIx64
 aspeed_sdhci_write(uint64_t addr, uint32_t size, uint64_t data) "@0x%" PRIx64 " size %u: 0x%" PRIx64
+
+# ssi-sd.c
+ssi_sd_latency(uint64_t sector, const char *kind, uint32_t us, int64_t deadline_ns) "sector=%" PRIu64 " kind=%s latency=%u us deadline=%" PRId64 " ns"

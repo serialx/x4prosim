@@ -1,3 +1,6 @@
+# esp32s3_gpspi.c
+esp32s3_gpspi_transfer(uint32_t sclk_hz, uint32_t bytes, int64_t duration_ns) "sclk=%u Hz bytes=%u duration=%" PRId64 " ns"
+
 # aspeed_smc.c
 
 aspeed_smc_flash_set_segment(int cs, uint64_t reg, uint64_t start, uint64_t end) "CS%d segreg=0x%"PRIx64" [ 0x%"PRIx64" - 0x%"PRIx64" ]"

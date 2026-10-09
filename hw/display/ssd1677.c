@@ -1,0 +1,339 @@
+/*
+ * Solomon SSD1677 e-paper controller (800x480, 1-bit RAM planes), as wired
+ * on the Xteink X4 Pro: write-only SPI, DC and RST on GPIO inputs, BUSY on a
+ * GPIO output (active high).
+ *
+ * Models the BW (0x24) and RED (0x26) RAM planes with the data-entry mode,
+ * RAM window and address counters, auto-write fills (0x46/0x47), display
+ * update control 1 (0x21) RAM options, and master activation (0x20), which
+ * holds BUSY for "busy-ms" and then shows the panel on a graphic console.
+ * Waveforms are not simulated: with no custom LUT the panel shows the BW
+ * plane; after a LUT upload (0x32) it shows the two planes as 4 gray levels.
+ * Everything else (voltages, booster, temperature, border) is accepted and
+ * ignored.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 or
+ * (at your option) any later version.
+ */
+#include "qemu/osdep.h"
+#include "qemu/log.h"
+#include "qemu/module.h"
+#include "qemu/timer.h"
+#include "hw/ssi/ssi.h"
+#include "hw/core/irq.h"
+#include "hw/core/qdev-properties.h"
+#include "ui/console.h"
+#include "ui/pixel_ops.h"
+
+#define TYPE_SSD1677 "ssd1677"
+OBJECT_DECLARE_SIMPLE_TYPE(Ssd1677State, SSD1677)
+
+#define W 800
+#define H 480
+#define WB (W / 8)
+#define MAX_ARGS 256
+
+enum { PLANE_BW, PLANE_RED };
+
+struct Ssd1677State {
+    SSIPeripheral parent_obj;
+    QemuConsole *con;
+    qemu_irq busy;
+    QEMUTimer busy_timer;
+    uint32_t busy_ms;
+    bool portrait;      /* show the panel turned 90 degrees clockwise, as the X4 Pro is held */
+
+    bool dc;            /* 1 = data */
+    bool in_reset;
+    bool asleep;
+    uint8_t cmd;
+    uint32_t nargs;
+    uint8_t args[MAX_ARGS];
+
+    uint8_t entry;      /* data entry mode: bit0 X inc, bit1 Y inc, bit2 Y first */
+    uint16_t xs, xe, ys, ye, xc, yc;
+    uint8_t ctrl1[2];
+    bool custom_lut;
+
+    uint8_t ram[2][H][WB];
+    uint8_t shown[H][WB * 2];   /* last activated image as 2-bit pixels, packed */
+    bool redraw;
+};
+
+static void ssd1677_set_busy(Ssd1677State *s, uint32_t ms)
+{
+    qemu_set_irq(s->busy, 1);
+    timer_mod(&s->busy_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + ms);
+}
+
+static void ssd1677_busy_done(void *opaque)
+{
+    Ssd1677State *s = opaque;
+    qemu_set_irq(s->busy, 0);
+}
+
+static void ssd1677_ram_write(Ssd1677State *s, int plane, uint8_t v)
+{
+    if (s->xc < W && s->yc < H) {
+        s->ram[plane][s->yc][s->xc / 8] = v;
+    }
+    /* X counts in pixels, 8 per byte; Y-first mode (bit 2) isn't used by the driver. */
+    bool xinc = s->entry & 1, yinc = s->entry & 2;
+    bool x_at_end = xinc ? s->xc / 8 >= s->xe / 8 : s->xc / 8 <= s->xe / 8;
+    if (!x_at_end) {
+        s->xc = xinc ? s->xc + 8 : s->xc - 8;
+        return;
+    }
+    s->xc = s->xs;
+    if (s->yc == s->ye) {
+        s->yc = s->ys;
+    } else {
+        s->yc = yinc ? s->yc + 1 : s->yc - 1;
+    }
+}
+
+/* RAM option from display update control 1: 0 normal, 4 bypass as 0, 8 invert. */
+static uint8_t ssd1677_opt(uint8_t opt, uint8_t v)
+{
+    switch (opt & 0xc) {
+    case 0x4: return 0x00;
+    case 0x8: return ~v;
+    }
+    return v;
+}
+
+static void ssd1677_activate(Ssd1677State *s)
+{
+    uint8_t bw_opt = s->ctrl1[0] & 0xf, red_opt = s->ctrl1[0] >> 4;
+
+    /* Gates are wired in reverse on the X4 Pro: RAM row r is screen row H-1-r. */
+    for (int y = 0; y < H; y++) {
+        int r = H - 1 - y;
+        for (int xb = 0; xb < WB; xb++) {
+            uint8_t bw = ssd1677_opt(bw_opt, s->ram[PLANE_BW][r][xb]);
+            uint8_t red = ssd1677_opt(red_opt, s->ram[PLANE_RED][r][xb]);
+            uint16_t px = 0;
+            for (int b = 7; b >= 0; b--) {
+                int lvl;
+                if (s->custom_lut) {
+                    lvl = (((red >> b) & 1) << 1) | ((bw >> b) & 1);
+                } else {
+                    lvl = ((bw >> b) & 1) ? 3 : 0;
+                }
+                px = (px << 2) | lvl;
+            }
+            s->shown[y][xb * 2] = px >> 8;
+            s->shown[y][xb * 2 + 1] = px & 0xff;
+        }
+    }
+    s->redraw = true;
+}
+
+static void ssd1677_command_done(Ssd1677State *s)
+{
+    uint8_t *a = s->args;
+
+    switch (s->cmd) {
+    case 0x11:
+        if (s->nargs >= 1) s->entry = a[0] & 7;
+        break;
+    case 0x21:
+        if (s->nargs >= 1) s->ctrl1[0] = a[0];
+        if (s->nargs >= 2) s->ctrl1[1] = a[1];
+        break;
+    case 0x44:
+        if (s->nargs >= 4) {
+            s->xs = (a[0] | a[1] << 8) & 0x3ff;
+            s->xe = (a[2] | a[3] << 8) & 0x3ff;
+        }
+        break;
+    case 0x45:
+        if (s->nargs >= 4) {
+            s->ys = (a[0] | a[1] << 8) & 0x3ff;
+            s->ye = (a[2] | a[3] << 8) & 0x3ff;
+        }
+        break;
+    case 0x4E:
+        if (s->nargs >= 2) s->xc = (a[0] | a[1] << 8) & 0x3ff;
+        break;
+    case 0x4F:
+        if (s->nargs >= 2) s->yc = (a[0] | a[1] << 8) & 0x3ff;
+        break;
+    case 0x46:
+    case 0x47:
+        if (s->nargs >= 1) {
+            /* Auto write: bit 7 = fill value, the rest picks a pattern; plain fill is enough. */
+            memset(s->ram[s->cmd == 0x46 ? PLANE_BW : PLANE_RED], (a[0] & 0x80) ? 0xff : 0x00,
+                   sizeof(s->ram[0]));
+            ssd1677_set_busy(s, 5);
+        }
+        break;
+    }
+}
+
+static void ssd1677_command_start(Ssd1677State *s, uint8_t c)
+{
+    s->cmd = c;
+    s->nargs = 0;
+
+    switch (c) {
+    case 0x12:  /* SWRESET */
+        s->entry = 3;
+        s->xs = 0; s->xe = W - 1; s->ys = 0; s->ye = H - 1;
+        s->xc = 0; s->yc = 0;
+        s->ctrl1[0] = s->ctrl1[1] = 0;
+        s->custom_lut = false;
+        ssd1677_set_busy(s, 2);
+        break;
+    case 0x20:  /* master activation */
+        ssd1677_activate(s);
+        ssd1677_set_busy(s, s->busy_ms);
+        break;
+    case 0x32:
+        s->custom_lut = true;
+        break;
+    }
+}
+
+static uint32_t ssd1677_transfer(SSIPeripheral *dev, uint32_t data)
+{
+    Ssd1677State *s = SSD1677(dev);
+    uint8_t v = data;
+
+    if (s->in_reset || (s->asleep && !s->dc)) {
+        return 0;
+    }
+    if (!s->dc) {
+        ssd1677_command_start(s, v);
+        return 0;
+    }
+    switch (s->cmd) {
+    case 0x24:
+        ssd1677_ram_write(s, PLANE_BW, v);
+        break;
+    case 0x26:
+        ssd1677_ram_write(s, PLANE_RED, v);
+        break;
+    case 0x10:
+        if (v & 3) s->asleep = true;
+        break;
+    default:
+        if (s->nargs < MAX_ARGS) {
+            s->args[s->nargs++] = v;
+        }
+        /* Commands apply as soon as their argument bytes are in. */
+        switch (s->cmd) {
+        case 0x11: case 0x46: case 0x47:
+            if (s->nargs == 1) ssd1677_command_done(s);
+            break;
+        case 0x21: case 0x4E: case 0x4F:
+            if (s->nargs <= 2) ssd1677_command_done(s);
+            break;
+        case 0x44: case 0x45:
+            if (s->nargs == 4) ssd1677_command_done(s);
+            break;
+        }
+        break;
+    }
+    return 0;
+}
+
+static void ssd1677_set_dc(void *opaque, int n, int level)
+{
+    SSD1677(opaque)->dc = level != 0;
+}
+
+static void ssd1677_set_rst(void *opaque, int n, int level)
+{
+    Ssd1677State *s = SSD1677(opaque);
+    if (!level) {
+        s->in_reset = true;
+    } else if (s->in_reset) {
+        s->in_reset = false;
+        s->asleep = false;
+        s->cmd = 0;
+        s->nargs = 0;
+    }
+}
+
+static bool ssd1677_update_display(void *opaque)
+{
+    Ssd1677State *s = opaque;
+    static const uint8_t shade[4] = { 0x10, 0x60, 0xa8, 0xf0 };
+    DisplaySurface *surface = qemu_console_surface(s->con);
+
+    if (!s->redraw) {
+        return true;
+    }
+    s->redraw = false;
+    uint32_t *d = (uint32_t *)surface_data(surface);
+    int stride = surface_stride(surface) / 4;
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            uint8_t byte = s->shown[y][x / 4];
+            uint8_t g = shade[(byte >> (6 - 2 * (x % 4))) & 3];
+            int dx = s->portrait ? H - 1 - y : x, dy = s->portrait ? x : y;
+            d[dy * stride + dx] = rgb_to_pixel32(g, g, g);
+        }
+    }
+    qemu_console_update(s->con, 0, 0,
+                        surface_width(surface), surface_height(surface));
+    return true;
+}
+
+static void ssd1677_invalidate(void *opaque)
+{
+    SSD1677(opaque)->redraw = true;
+}
+
+static const GraphicHwOps ssd1677_ops = {
+    .invalidate = ssd1677_invalidate,
+    .gfx_update = ssd1677_update_display,
+};
+
+static void ssd1677_realize(SSIPeripheral *d, Error **errp)
+{
+    DeviceState *dev = DEVICE(d);
+    Ssd1677State *s = SSD1677(d);
+
+    memset(s->ram, 0xff, sizeof(s->ram));
+    memset(s->shown, 0xff, sizeof(s->shown));
+    s->redraw = true;
+    s->con = qemu_graphic_console_create(dev, 0, &ssd1677_ops, s);
+    qemu_console_resize(s->con, s->portrait ? H : W, s->portrait ? W : H);
+    timer_init_ms(&s->busy_timer, QEMU_CLOCK_VIRTUAL, ssd1677_busy_done, s);
+    qdev_init_gpio_in_named(dev, ssd1677_set_dc, "dc", 1);
+    qdev_init_gpio_in_named(dev, ssd1677_set_rst, "rst", 1);
+    qdev_init_gpio_out_named(dev, &s->busy, "busy", 1);
+}
+
+static const Property ssd1677_properties[] = {
+    DEFINE_PROP_UINT32("busy-ms", Ssd1677State, busy_ms, 300),
+    DEFINE_PROP_BOOL("portrait", Ssd1677State, portrait, true),
+};
+
+static void ssd1677_class_init(ObjectClass *klass, const void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SSIPeripheralClass *k = SSI_PERIPHERAL_CLASS(klass);
+
+    k->realize = ssd1677_realize;
+    k->transfer = ssd1677_transfer;
+    k->cs_polarity = SSI_CS_LOW;
+    device_class_set_props(dc, ssd1677_properties);
+}
+
+static const TypeInfo ssd1677_info = {
+    .name = TYPE_SSD1677,
+    .parent = TYPE_SSI_PERIPHERAL,
+    .instance_size = sizeof(Ssd1677State),
+    .class_init = ssd1677_class_init,
+};
+
+static void ssd1677_register_types(void)
+{
+    type_register_static(&ssd1677_info);
+}
+
+type_init(ssd1677_register_types)
