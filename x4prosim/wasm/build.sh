@@ -36,8 +36,12 @@ pkg-config --print-errors --exists glib-2.0 pixman-1 zlib libffi libgcrypt || {
 # Retain the TCI port's pthread, fiber/libffi and filesystem runtime settings.
 # Both address modes share the wasm64 dependency ABI.
 LINK_FLAGS="-O3 -g2 $LDFLAGS -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM=1"
-LINK_FLAGS+=" -sALLOW_TABLE_GROWTH=1 -sALLOW_MEMORY_GROWTH=1"
-LINK_FLAGS+=" -sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=2147483648"
+LINK_FLAGS+=" -sALLOW_TABLE_GROWTH=1"
+# Fixed memory avoids a shared-heap view check at each JS heap access.
+# Larger workloads can raise the initial size or opt back into growth.
+LINK_FLAGS+=" -sALLOW_MEMORY_GROWTH=${WASM_MEMORY_GROWTH:-0}"
+LINK_FLAGS+=" -sINITIAL_MEMORY=${WASM_INITIAL_MEMORY:-268435456}"
+LINK_FLAGS+=" -sMAXIMUM_MEMORY=2147483648"
 LINK_FLAGS+=" -sSTACK_SIZE=8388608 -sASYNCIFY_STACK_SIZE=1048576"
 LINK_FLAGS+=" -sEXIT_RUNTIME=1 -sEXPORT_ES6=0 -sENVIRONMENT=web,worker,node -sASYNCIFY_IMPORTS=ffi_call_js"
 LINK_FLAGS+=" -sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS"
