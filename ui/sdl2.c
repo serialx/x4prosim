@@ -127,6 +127,15 @@ void sdl2_window_create(struct sdl2_console *scon)
         qemu_egl_display = eglGetCurrentDisplay();
 #endif
     } else {
+#ifdef __EMSCRIPTEN__
+        /*
+         * QEMU runs on a pthread (PROXY_TO_PTHREAD). SDL's GLES2 renderer would
+         * create its WebGL context on the browser's main thread, where this
+         * thread cannot use it, so the first GL call crashes. The software
+         * renderer presents through main-thread proxying and works everywhere.
+         */
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+#endif
         /* The SDL renderer is only used by sdl2-2D, when OpenGL is disabled */
         scon->real_renderer = SDL_CreateRenderer(scon->real_window, -1, 0);
     }
