@@ -20,3 +20,8 @@ GTAGS
 *.swp
 *.patch
 *.gcov
+
+# WebAssembly builds and dependency sysroots
+/build-wasm/
+/build-wasm-32limit/
+/build-wasm-deps/

@@ -1,0 +1,26 @@
+# Dependency cross configuration. Paths are relative to this file.
+[constants]
+sysroot = '@DIRNAME@' / '../../build-wasm-deps/sysroot-wasm64'
+
+[host_machine]
+system = 'emscripten'
+cpu_family = 'wasm64'
+cpu = 'wasm64'
+endian = 'little'
+
+[binaries]
+c = 'emcc'
+cpp = 'em++'
+ar = 'emar'
+ranlib = 'emranlib'
+pkg-config = ['pkg-config', '--static']
+
+[properties]
+needs_exe_wrapper = true
+pkg_config_libdir = sysroot / 'lib/pkgconfig'
+
+[built-in options]
+c_args = ['-O3', '-pthread', '-DWASM_BIGINT', '-sMEMORY64=1', '-I' + sysroot / 'include']
+cpp_args = ['-O3', '-pthread', '-DWASM_BIGINT', '-sMEMORY64=1', '-I' + sysroot / 'include']
+c_link_args = ['-pthread', '-sWASM_BIGINT', '-sASYNCIFY=1', '-sMEMORY64=1', '-L' + sysroot / 'lib']
+cpp_link_args = ['-pthread', '-sWASM_BIGINT', '-sASYNCIFY=1', '-sMEMORY64=1', '-L' + sysroot / 'lib']
