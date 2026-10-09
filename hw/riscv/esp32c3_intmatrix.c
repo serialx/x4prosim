@@ -25,9 +25,9 @@
 #define INTMATRIX_DEBUG     0
 #define INTMATRIX_WARNING   0
 
-#define BIT_SET(reg, bit)   ((reg) & BIT(bit))
-#define CLEAR_BIT(reg, bit) do { (reg) &= ~BIT(bit); } while(0)
-#define SET_BIT(reg, bit)   do { (reg) |= BIT(bit); } while(0)
+#define BIT_SET(reg, bit)   ((reg) & BIT_ULL(bit))
+#define CLEAR_BIT(reg, bit) do { (reg) &= ~BIT_ULL(bit); } while(0)
+#define SET_BIT(reg, bit)   do { (reg) |= BIT_ULL(bit); } while(0)
 
 
 static int esp32c3_get_output_line_level(ESP32C3IntMatrixState *s, int line)
@@ -36,7 +36,7 @@ static int esp32c3_get_output_line_level(ESP32C3IntMatrixState *s, int line)
 
     for (int i = 0; level_shared == 0 && i < ESP32C3_INT_MATRIX_INPUTS; i++) {
         const uint_fast8_t mapped = s->irq_map[i];
-        if (mapped == line && (s->irq_levels & BIT(i)))
+        if (mapped == line && (s->irq_levels & BIT_ULL(i)))
         {
             level_shared |= 1;
         }
