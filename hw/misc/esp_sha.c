@@ -22,46 +22,107 @@
 #define SHA_WARNING 0
 #define SHA_DEBUG 0
 
+/* Do not cast callbacks: the compression routines return int, not void. */
+static void esp_sha1_init(void *context)
+{
+    sha1_init(context);
+}
+
+static void esp_sha224_init(void *context)
+{
+    sha224_init(context);
+}
+
+static void esp_sha256_init(void *context)
+{
+    sha256_init(context);
+}
+
+static void esp_sha384_init(void *context)
+{
+    sha384_init(context);
+}
+
+static void esp_sha512_init(void *context)
+{
+    sha512_init(context);
+}
+
+static void esp_sha512_224_init(void *context)
+{
+    sha512_224_init(context);
+}
+
+static void esp_sha512_256_init(void *context)
+{
+    sha512_256_init(context);
+}
+
+static void esp_sha512_t_init(void *context)
+{
+    sha512_t_init(context);
+}
+
+static void esp_sha1_compress(void *context, const uint8_t *message)
+{
+    sha1_compress(((struct sha1_state *)context)->state, message);
+}
+
+static void esp_sha224_compress(void *context, const uint8_t *message)
+{
+    sha224_compress(context, (uint8_t *)message);
+}
+
+static void esp_sha256_compress(void *context, const uint8_t *message)
+{
+    sha256_compress(context, (uint8_t *)message);
+}
+
+static void esp_sha512_compress(void *context, const uint8_t *message)
+{
+    sha512_compress(context, (uint8_t *)message);
+}
+
 static ESPHashAlg esp_sha_algs[] = {
     [ESP_SHA_1_MODE]    = {
-        .init     = (hash_init) sha1_init,
-        .compress = (hash_compress) sha1_compress,
+        .init     = esp_sha1_init,
+        .compress = esp_sha1_compress,
         .len      = sizeof(struct sha1_state)
     },
     [ESP_SHA_224_MODE]  = {
-        .init     = (hash_init) sha224_init,
-        .compress = (hash_compress) sha224_compress,
+        .init     = esp_sha224_init,
+        .compress = esp_sha224_compress,
         .len      = SHA224_HASH_SIZE
     },
     [ESP_SHA_256_MODE]  = {
-        .init     = (hash_init) sha256_init,
-        .compress = (hash_compress) sha256_compress,
+        .init     = esp_sha256_init,
+        .compress = esp_sha256_compress,
         .len      = sizeof(struct sha256_state)
     },
     [ESP_SHA_384_MODE]  = {
-        .init     = (hash_init) sha384_init,
-        .compress = (hash_compress) sha512_compress,
+        .init     = esp_sha384_init,
+        .compress = esp_sha512_compress,
         .len      = SHA384_HASH_SIZE
     },
     [ESP_SHA_512_MODE]  = {
-        .init     = (hash_init) sha512_init,
-        .compress = (hash_compress) sha512_compress,
+        .init     = esp_sha512_init,
+        .compress = esp_sha512_compress,
         .len      = sizeof(struct sha512_state)
     },
     [ESP_SHA_512_224_MODE]  = {
-        .init     = (hash_init) sha512_224_init,
-        .compress = (hash_compress) sha512_compress,
+        .init     = esp_sha512_224_init,
+        .compress = esp_sha512_compress,
         .len      = sizeof(struct sha512_state)
     },
     [ESP_SHA_512_256_MODE]  = {
-        .init     = (hash_init) sha512_256_init,
-        .compress = (hash_compress) sha512_compress,
+        .init     = esp_sha512_256_init,
+        .compress = esp_sha512_compress,
         .len      = sizeof(struct sha512_state)
     },
     [ESP_SHA_512_t_MODE]  = {
-        .init         = (hash_init) sha512_t_init,
-        .init_message = (hash_init_message) sha512_t_init_message,
-        .compress     = (hash_compress) sha512_compress,
+        .init         = esp_sha512_t_init,
+        .init_message = sha512_t_init_message,
+        .compress     = esp_sha512_compress,
         .len          = sizeof(struct sha512_state)
     },
 };
