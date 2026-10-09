@@ -1,6 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
+$('turbo').checked = params.get('turbo') === '1';
 let frame, bootData, savedSD, pending = false;
 let milestones = 0, startedAt;
 const held = new Set();
@@ -71,7 +72,7 @@ async function start() {
     pending = true;
     startedAt = performance.now(); milestones = 0; window.bootTimeSeconds = null;
     $('start').disabled = true; $('console').textContent = '';
-    for (const id of ['flash', 'sd', 'reset', 'stop', 'download']) $(id).disabled = true;
+    for (const id of ['flash', 'sd', 'turbo', 'reset', 'stop', 'download']) $(id).disabled = true;
     try {
         if (!crossOriginIsolated) throw new Error('SharedArrayBuffer needs isolation headers. Serve this folder with serve.py on localhost or HTTPS.');
         status('Loading images…');
@@ -85,7 +86,7 @@ async function start() {
             fetchImage(machine === 'x3' ? 'esp32c3-rom.bin' : 'esp32s3_rev0_rom.bin')
         ]);
         if (!sd.byteLength || sd.byteLength % 512) throw new Error('SD image must contain a whole number of 512-byte sectors.');
-        bootData = {type: 'boot', machine, flash, sd, rom};
+        bootData = {type: 'boot', machine, flash, sd, rom, turbo: $('turbo').checked};
         buttons(machine);
         $('screen').style.aspectRatio = machine === 'x3' ? '528 / 792' : '480 / 800';
         frame = document.createElement('iframe');
@@ -99,7 +100,7 @@ async function start() {
 function fail(message) {
     status(message); append(`Error: ${message}`);
     if (!frame) {
-        for (const id of ['start', 'flash', 'sd']) $(id).disabled = false;
+        for (const id of ['start', 'flash', 'sd', 'turbo']) $(id).disabled = false;
         $('download').disabled = !savedSD;
     }
 }
@@ -129,7 +130,7 @@ window.addEventListener('message', ({source, origin, data}) => {
             $('screen').textContent = 'Stopped. The SD image is kept until you close this page.';
             $('keys').replaceChildren();
             for (const id of ['reset', 'stop']) $(id).disabled = true;
-            for (const id of ['start', 'flash', 'sd', 'download']) $(id).disabled = false;
+            for (const id of ['start', 'flash', 'sd', 'turbo', 'download']) $(id).disabled = false;
             status('Stopped. Start resumes from a fresh boot with your current SD image.');
         }
     }

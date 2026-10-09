@@ -29,7 +29,16 @@ fi
 [ -n "$X4BR" ] && echo "x4prosim: Wi-Fi bridged to $X4BR (LAN DHCP)" >&2 || echo "x4prosim: Wi-Fi on QEMU NAT (10.0.2.15); X4BR=br0 for your LAN" >&2
 net=${X4NET--nic user,model=esp32_wifi,hostfwd=tcp::8080-:80}
 # X3 costs are nanoseconds: one icount tick is 1 ns; Xtensa keeps 4 ns ticks.
-exec "$qemu" -machine "$X4MACHINE" -icount shift=$icount_shift,sleep=on \
+case "${X4TURBO:-0}" in
+  0) set -- -icount shift=$icount_shift,sleep=on "$@" ;;
+  1)
+    # The helper emits whitespace-free arguments, one per line.
+    set -- -icount shift=$icount_shift,sleep=off \
+      $(sh "$here/x4prosim/turbo-args.sh" "$X4MACHINE") "$@"
+    ;;
+  *) echo 'X4TURBO must be 0 or 1' >&2; exit 2 ;;
+esac
+exec "$qemu" -machine "$X4MACHINE" \
   -drive file="$img.run",if=mtd,format=raw \
   -drive file="$sd",if=sd,format=raw \
   -chardev stdio,id=cdc,mux=off -serial null \

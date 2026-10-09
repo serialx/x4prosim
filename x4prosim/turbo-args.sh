@@ -1,0 +1,30 @@
+#!/bin/sh
+# One argument per line, shared by native/Node launchers and smoke tests.
+# Keep the browser's turboProperties in wasm/web/runtime.js in sync.
+set -eu
+for property in read-access-us read-seq-access-us read-repeat-us read-next-us \
+    write-busy-us write-random-busy-us write-repeat-busy-us write-block-busy-us \
+    write-stop-busy-us write-stop-decrement-us write-stop-random-extra-us; do
+    printf '%s\n' -global "ssi-sd.$property=0"
+done
+for property in transaction-overhead-us transaction-overhead-ns buffer-overhead-ns; do
+    printf '%s\n' -global "driver=ssi.esp32s3.gpspi,property=$property,value=0"
+done
+printf '%s\n' -global driver=ssi.esp32s3.gpspi,property=zero-wire-time,value=on
+case "$1" in
+    x3)
+        for property in frame-us refresh-overhead-us; do
+            printf '%s\n' -global "uc8279.$property=0"
+        done
+        # Polling drivers must observe BUSY before it completes.
+        for property in pon-ms pof-ms busy-ms; do
+            printf '%s\n' -global "uc8279.$property=1"
+        done
+        ;;
+    x4pro)
+        # Zero would divide by zero in animation playback; 1 us is the minimum.
+        # PON/POF are fixed at 2 ms in this model, with no override properties.
+        printf '%s\n' -global uc8179.frame-us=1 -global uc8179.busy-ms=1
+        ;;
+    *) echo "unsupported machine: $1" >&2; exit 2 ;;
+esac

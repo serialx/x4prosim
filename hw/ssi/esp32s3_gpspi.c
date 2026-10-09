@@ -57,6 +57,7 @@ struct Esp32s3GpspiState {
     uint32_t transaction_overhead_us;
     uint32_t transaction_overhead_ns;
     uint32_t buffer_overhead_ns;
+    bool zero_wire_time;
     uint32_t transfer_bytes;
     uint8_t transfer_buf[64];
 };
@@ -97,6 +98,12 @@ static void gpspi_start_transfer(Esp32s3GpspiState *s)
         duration_ns += s->buffer_overhead_ns;
     }
     memcpy(s->transfer_buf, &s->regs[R_W0 / 4], s->transfer_bytes);
+    if (s->zero_wire_time) {
+        /* Explicit non-accurate mode: avoid a timer for each SPI transfer. */
+        trace_esp32s3_gpspi_transfer(80000000 / divider, s->transfer_bytes, 0);
+        gpspi_transfer(s);
+        return;
+    }
     trace_esp32s3_gpspi_transfer(80000000 / divider, s->transfer_bytes,
                                duration_ns);
     timer_mod(s->transfer_timer,
@@ -189,6 +196,7 @@ static const Property gpspi_properties[] = {
                        transaction_overhead_ns, 0),
     DEFINE_PROP_UINT32("buffer-overhead-ns", Esp32s3GpspiState,
                        buffer_overhead_ns, 0),
+    DEFINE_PROP_BOOL("zero-wire-time", Esp32s3GpspiState, zero_wire_time, false),
 };
 
 static void gpspi_class_init(ObjectClass *klass, const void *data)

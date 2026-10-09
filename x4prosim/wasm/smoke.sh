@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smoke.sh flash.bin sd.img or --rom-only (CI without firmware).
+# smoke.sh [--turbo] flash.bin sd.img or [--turbo] --rom-only.
 # Optional TIMEOUT, EVIDENCE_DIR, NODE, WASM64_MODE, NATIVE_QEMU, REFERENCE_PPM.
 # RUN_NODE overrides the launcher for comparisons; REQUIRE_JIT=0 permits TCI.
 # Images are copied; logs, PPM screenshots and measurements remain in evidence/.
@@ -17,16 +17,20 @@ import sys
 import time
 
 root = Path(sys.argv[1])
-rom_only = sys.argv[2:] == ['--rom-only']
-if not rom_only and len(sys.argv) != 4:
-    sys.exit('usage: smoke.sh flash.bin sd.img | --rom-only')
+args = sys.argv[2:]
+turbo = bool(args and args[0] == '--turbo')
+if turbo:
+    args = args[1:]
+rom_only = args == ['--rom-only']
+if not rom_only and (len(args) != 2 or any(arg.startswith('--') for arg in args)):
+    sys.exit('usage: smoke.sh [--turbo] flash.bin sd.img | [--turbo] --rom-only')
 evidence = Path(os.environ.get('EVIDENCE_DIR', root / 'build-wasm/evidence/smoke')).resolve()
 evidence.mkdir(parents=True, exist_ok=True)
 if rom_only:
     subprocess.run([sys.executable, str(root / 'x4prosim/mksd.py'),
                     str(evidence / 'sd.img'), '64'], check=True)
 else:
-    for src, dest in zip(sys.argv[2:], ('flash.bin', 'sd.img')):
+    for src, dest in zip(args, ('flash.bin', 'sd.img')):
         shutil.copyfile(src, evidence / dest)
 (evidence / 'blank.bin').write_bytes(bytes(16 * 1024 * 1024))
 timeout = float(os.environ.get('TIMEOUT', '600'))
@@ -36,6 +40,15 @@ milestone = re.compile(os.environ.get('HOME_MILESTONE',
     r'Wait complete:\s+(?:8279|X3)_DRF'))
 milestone_count = int(os.environ.get('HOME_MILESTONE_COUNT', '3'))
 measurements = {}
+reference = os.environ.get('REFERENCE_PPM')
+# Turbo compares image content and boot milestones, never guest timestamps.
+# Generate a fresh native turbo reference unless the caller supplies one.
+if turbo and not rom_only and not os.environ.get('NATIVE_QEMU') and not reference:
+    native_evidence = evidence / 'native-turbo'
+    subprocess.run([str(root / 'x4prosim/wasm/smoke.sh'), '--turbo', *args],
+        env={**os.environ, 'NATIVE_QEMU': str(root / 'build'),
+             'EVIDENCE_DIR': str(native_evidence)}, check=True)
+    reference = str(native_evidence / 'x3.ppm')
 
 
 def run(machine, flash):
@@ -46,9 +59,15 @@ def run(machine, flash):
     require_jit = not native and os.environ.get('REQUIRE_JIT', '1') != '0'
     if native:
         arch = 'riscv32' if machine == 'x3' else 'xtensa'
+        timing = ['-icount', 'shift=' + ('0' if machine == 'x3' else '2') +
+                  ',sleep=' + ('off' if turbo else 'on')]
+        if turbo:
+            timing += subprocess.check_output(
+                ['sh', str(root / 'x4prosim/turbo-args.sh'), machine],
+                text=True).splitlines()
         command = [str(Path(native) / ('qemu-system-' + arch)),
             '-L', str(root / 'pc-bios'), '-machine', machine,
-            '-icount', 'shift=' + ('0' if machine == 'x3' else '2') + ',sleep=on',
+            *timing,
             '-drive', f'file={str(flash).replace(",", ",,")},if=mtd,format=raw',
             '-drive', f'file={str(evidence / "sd.img").replace(",", ",,")},if=sd,format=raw',
             '-chardev', 'stdio,id=cdc,mux=on', '-serial', 'null',
@@ -59,7 +78,8 @@ def run(machine, flash):
                    str(flash), str(evidence / 'sd.img')]
     start = time.monotonic()
     p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.STDOUT, env={**os.environ, 'X4MACHINE': machine, 'WASM_JIT_STATS': '1'})
+                         stderr=subprocess.STDOUT, env={**os.environ, 'X4MACHINE': machine,
+                         'WASM_JIT_STATS': '1', 'TURBO': '1' if turbo else '0'})
     sel = selectors.DefaultSelector()
     sel.register(p.stdout, selectors.EVENT_READ)
     output = bytearray()
@@ -127,7 +147,6 @@ def run(machine, flash):
                     compiled = int(counts[-1]) if counts else 0
                     if require_jit and machine == 'x3' and compiled == 0:
                         raise RuntimeError('Home reached without any JIT-compiled TBs')
-                    reference = os.environ.get('REFERENCE_PPM')
                     if machine == 'x3' and reference and shot.read_bytes() != Path(reference).read_bytes():
                         raise RuntimeError(f'Panel differs from native reference {reference}')
                     screenshot_time = time.monotonic() - start
@@ -146,7 +165,7 @@ def run(machine, flash):
                             p.kill()
                         time.sleep(.01)
                     peak_rss = usage.ru_maxrss / (1024 if sys.platform == 'darwin' else 1)
-                    measurements[machine] = dict(startup_to_rom_s=boot,
+                    measurements[machine] = dict(turbo=turbo, startup_to_rom_s=boot,
                         milestone_s=ready, settled_mem_s=settled_time, screenshot_s=screenshot_time,
                         jit_compiled_tbs=compiled, home_jit_compiled_tbs=home_compiled,
                         peak_rss_kib=peak_rss,

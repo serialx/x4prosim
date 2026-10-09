@@ -109,6 +109,18 @@ try {
         measurements.file_pickers = true;
     }
     await waitFor('crossOriginIsolated && document.querySelector("iframe")');
+    measurements.turbo = await evaluate('document.querySelector("#turbo").checked');
+    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') === '1') ||
+        !await evaluate('document.querySelector("#turbo").disabled')) {
+        throw new Error('Turbo selection must follow the URL and stay fixed during a run');
+    }
+    const runtimeArgs = await waitFor('document.querySelector("iframe").contentWindow.Module?.arguments');
+    const shift = process.env.WEB_MACHINE === 'x4pro' ? 2 : 0;
+    const icount = `shift=${shift},sleep=${measurements.turbo ? 'off' : 'on'}`;
+    if (!runtimeArgs.includes(icount) ||
+        runtimeArgs.includes('driver=ssi.esp32s3.gpspi,property=zero-wire-time,value=on') !== measurements.turbo) {
+        throw new Error('Runtime timing options do not match the Turbo selection');
+    }
     measurements.cross_origin_isolated = await evaluate('crossOriginIsolated');
     measurements.service_worker_controlled = await evaluate('!!navigator.serviceWorker.controller');
     if (process.env.EXPECT_SERVICE_WORKER === '1' && !measurements.service_worker_controlled) {
@@ -193,6 +205,9 @@ try {
     // Stop snapshots the modified SD image and tears down all pthread workers.
     await evaluate('document.querySelector("#stop").click()');
     await waitFor('!document.querySelector("iframe")');
+    if (await evaluate('document.querySelector("#turbo").disabled')) {
+        throw new Error('Stop must allow changing Turbo before the next boot');
+    }
     measurements.exported_sd_bytes = await evaluate('savedSD.byteLength');
     measurements.stop_removed_runtime = true;
     measurements.sampled_peak_chrome_rss_kib = peakRSS;

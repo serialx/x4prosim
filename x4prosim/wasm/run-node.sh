@@ -26,13 +26,24 @@ case "$machine" in
     x4pro) arch=xtensa; shift_bits=2; accel=tcg,tb-size=64 ;;
     *) echo "unsupported machine: $machine" >&2; exit 2 ;;
 esac
+case "${TURBO:-0}" in
+    0|1) ;;
+    *) echo 'TURBO must be 0 or 1' >&2; exit 2 ;;
+esac
 cp "$flash" "$flash.run"
 chmod u+w "$flash.run"
+timing=(-icount "shift=$shift_bits,sleep=${RUN_NODE_SLEEP:-on}")
+if [ "${TURBO:-0}" = 1 ]; then
+    timing=(-icount "shift=$shift_bits,sleep=off")
+    while IFS= read -r arg; do
+        timing+=("$arg")
+    done < <(sh "$ROOT/x4prosim/turbo-args.sh" "$machine")
+fi
 exec "${NODE:-node}" "${WASM_BUILD_DIR:-$build}/qemu-system-$arch.js" \
     -L "/host$ROOT/pc-bios" \
     -accel "${WASM_ACCEL:-$accel}" \
     -machine "$machine" \
-    -icount "shift=$shift_bits,sleep=${RUN_NODE_SLEEP:-on}" \
+    "${timing[@]}" \
     -drive "file=/host${flash//,/,,}.run,if=mtd,format=raw,cache.direct=off" \
     -drive "file=/host${sd//,/,,},if=sd,format=raw,cache.direct=off" \
     -chardev stdio,id=cdc,mux=on -serial null \

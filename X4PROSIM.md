@@ -194,6 +194,22 @@ For larger workloads, rebuild with `WASM_INITIAL_MEMORY=<bytes>` or
 the Node accelerator setting; `ICOUNT_SLEEP=off` disables idle-time warping
 for deterministic timing comparisons. The production default stays `on`.
 
+For optional faster execution, use `TURBO=1 x4prosim/wasm/run-node.sh flash.bin
+sd.img`, `X4TURBO=1 x4prosim/run.sh flash.bin sd.img`, or the browser's
+**Turbo (not timing-accurate)** checkbox (also `?turbo=1`). Turbo is off by
+default. It keeps `-icount` with `sleep=off`, sets SD latencies and GPSPI setup
+overheads to zero, and enables `ssi.esp32s3.gpspi`'s opt-in `zero-wire-time`
+property for synchronous SPI transfers (default `off`). Removing `icount`
+instead makes per-transfer device timers depend on host scheduling, which
+slowed native execution and stalled Node boot in testing.
+X3 panel BUSY pulses retain a 1 ms minimum for polling drivers; X4 Pro uses
+1 µs frames and 1 ms refresh BUSY, retaining its fixed 2 ms power delays.
+Firmware delays and host overhead still apply. **Turbo is not timing-accurate and must not be
+used for timing measurements.** `smoke.sh --turbo flash.bin sd.img` checks
+Home, settled startup and the PPM against a fresh native turbo reference
+(or `REFERENCE_PPM`), without comparing guest timestamps; ordinary smoke and
+accurate-mode timestamp comparisons are unchanged.
+
 ### CI and hosting
 
 The separate `wasm` job leaves the native build matrix unchanged. It runs
