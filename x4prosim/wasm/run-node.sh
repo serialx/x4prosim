@@ -8,6 +8,10 @@ case "${WASM64_MODE:-32}" in
     32) build="$ROOT/build-wasm-32limit" ;;
     *) echo 'WASM64_MODE must be 64 or 32' >&2; exit 2 ;;
 esac
+case "${RUN_NODE_SLEEP:-on}" in
+    on|off) ;;
+    *) echo 'RUN_NODE_SLEEP must be on or off' >&2; exit 2 ;;
+esac
 if [ "$#" -lt 2 ]; then
     echo "usage: $0 flash.bin sd.img [qemu args...]" >&2
     exit 2
@@ -18,18 +22,17 @@ shift 2
 chip=$(od -An -tu1 -j12 -N1 "$flash" | tr -d ' ')
 machine=${X4MACHINE:-$([ "$chip" = 5 ] && echo x3 || echo x4pro)}
 case "$machine" in
-    x3) arch=riscv32; shift_bits=0; accel=tcg,one-insn-per-tb=on ;;
+    x3) arch=riscv32; shift_bits=0; accel=tcg ;;
     x4pro) arch=xtensa; shift_bits=2; accel=tcg ;;
     *) echo "unsupported machine: $machine" >&2; exit 2 ;;
 esac
-# One-insn TBs avoid repeated icount MMIO exits in this firmware workload.
-# WASM_ACCEL=tcg restores the normal TB size for CPU-heavy workloads.
 cp "$flash" "$flash.run"
 chmod u+w "$flash.run"
 exec "${NODE:-node}" "${WASM_BUILD_DIR:-$build}/qemu-system-$arch.js" \
     -L "/host$ROOT/pc-bios" \
     -accel "${WASM_ACCEL:-$accel}" \
-    -machine "$machine" -icount "shift=$shift_bits,sleep=on" \
+    -machine "$machine" \
+    -icount "shift=$shift_bits,sleep=${RUN_NODE_SLEEP:-on}" \
     -drive "file=/host${flash//,/,,}.run,if=mtd,format=raw,cache.direct=off" \
     -drive "file=/host${sd//,/,,},if=sd,format=raw,cache.direct=off" \
     -chardev stdio,id=cdc,mux=on -serial null \
