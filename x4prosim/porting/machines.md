@@ -33,8 +33,12 @@ A diff from `v11.1.2` also includes all previously merged layers; use
   const and counted, and removed sentinel-only property arrays. Kept existing
   Resettable hold callbacks on clock/interrupt devices.
 - Registered Xtensa SoC reset through `qemu_register_resettable` with
-  `device_class_set_legacy_reset`, preserving the original selective reset
-  body and registration location. Removed `CPUState.num_ases`: 11.1 allocates
+  `device_class_set_legacy_reset`. The initial port preserved the handler body
+  but incorrectly allowed generic traversal to reset every child bus before
+  the selective handler. The review fix disables that traversal, leaving
+  peripheral/RTC domain selection to the existing handler. Paired CPU-only,
+  digital and full-system reset checks now match the old implementation;
+  see [fixes.md](fixes.md). Removed `CPUState.num_ases`: 11.1 allocates
   the CPU address spaces from the class maximum (zero means one space).
 - Preserved aligned allocation of the S3 TIE extension before CPU execution.
 - Replaced `cpu_get_phys_page_debug` with `cpu_translate_for_debug` for ELF

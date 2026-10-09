@@ -225,3 +225,20 @@ Acceptance initially stopped here as instructed. Coordinator message
 `msg_6319323fa617` authorized resuming SD and S3 comparisons and explicitly
 excluded this pre-existing failure from the port grade. No fix is included in
 this acceptance commit.
+
+## Follow-up: exact baseline comparison after review fixes
+
+On 2026-10-09 the exact `x4prosim-pre-rebase` sources
+(`f9339150cd030918e72c8470800fe5ef5cc86e1d`) were built in temporary
+`build/pre-rebase` using the documented host configuration. Its unmodified
+Xtensa binary and the fixed port ran the same X4 Pro Home scenario with copies
+of the same S3 image and fresh SD cards. Result: **0 / 384000 differing pixels,
+and byte-identical PNGs**. The earlier 613-pixel, one-level difference was due
+to the stale reference binary; no UC8179 or display-path change was needed.
+
+The final X3 Home is also byte-identical to this report's original
+`acceptance-evidence.local/new/home.png`. Both upstream suites now pass:
+RISC-V 10 pass / 0 fail / 1 skip; Xtensa 8 pass / 0 fail / 2 skip, including
+both `device-introspect-test` runs. The baseline worktree was removed after
+testing. See [fixes.md](fixes.md) for commits, reset tables, exact commands,
+evidence paths, and the inherited concerns that remain open.
