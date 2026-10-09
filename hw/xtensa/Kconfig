@@ -40,3 +40,4 @@ config XTENSA_ESP32S3
     select UNIMP
     select OPENCORES_ETH
     select TMP105
+    select BM8563

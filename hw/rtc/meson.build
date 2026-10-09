@@ -14,3 +14,6 @@ system_ss.add(when: 'CONFIG_LS7A_RTC', if_true: files('ls7a_rtc.c'))
 system_ss.add(when: 'CONFIG_ALLWINNER_H3', if_true: files('allwinner-rtc.c'))
 system_ss.add(when: 'CONFIG_MC146818RTC', if_true: files('mc146818rtc.c'))
 system_ss.add(when: 'CONFIG_RS5C372_RTC', if_true: files('rs5c372.c'))
+
+system_ss.add(when: 'CONFIG_BM8563', if_true: files('bm8563.c'))
+system_ss.add(when: 'CONFIG_DS3231', if_true: files('ds3231.c'))

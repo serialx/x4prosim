@@ -41,3 +41,8 @@ system_ss.add(when: 'CONFIG_GOLDFISH_TTY', if_true: files('goldfish_tty.c'))
 
 specific_ss.add(when: 'CONFIG_TERMINAL3270', if_true: files('terminal3270.c'))
 specific_ss.add(when: 'CONFIG_PSERIES', if_true: files('spapr_vty.c'))
+
+system_ss.add(when: 'CONFIG_XTENSA_ESP32', if_true: files('esp32_uart.c'))
+system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('esp32_uart.c', 'esp32c3_uart.c'))
+system_ss.add(when: 'CONFIG_RISCV_ESP32C6', if_true: files('esp32_uart.c', 'esp32c3_uart.c', 'esp32c6_uart.c'))
+system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32_uart.c', 'esp32s3_uart.c'))

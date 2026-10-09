@@ -172,6 +172,7 @@ config RISCV_ESP32C3
     select SSI
     select SSI_SD
     select I2C
+    select DS3231
 
 config RISCV_ESP32C6
     bool
