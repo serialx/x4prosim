@@ -692,6 +692,7 @@ address_space_translate_for_iotlb(CPUState *cpu, int asidx, hwaddr orig_addr,
     IOMMUMemoryRegionClass *imrc;
     IOMMUTLBEntry iotlb;
     int iommu_idx;
+    int original_prot = *prot;
     hwaddr addr = orig_addr;
     AddressSpaceDispatch *d = address_space_to_dispatch(cpu->cpu_ases[asidx].as);
 
@@ -736,6 +737,12 @@ address_space_translate_for_iotlb(CPUState *cpu, int asidx, hwaddr orig_addr,
     return section;
 
 translate_fail:
+    /*
+     * Route the denied access through the unassigned MMIO region.  Retain
+     * the CPU permissions so the TLB records its MMIO slow-path flags; an
+     * entirely disabled entry loses those flags after the initial fill.
+     */
+    *prot = original_prot;
     /*
      * We should be given a page-aligned address -- certainly
      * tlb_set_page_with_attrs() does so.  The page offset of xlat
