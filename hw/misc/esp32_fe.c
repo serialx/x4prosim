@@ -1,0 +1,67 @@
+
+#include "qemu/osdep.h"
+#include "qemu/module.h"
+#include "qemu/log.h"
+#include "qemu/error-report.h"
+#include "qemu/guest-random.h"
+#include "qapi/error.h"
+#include "hw/core/sysbus.h"
+#include "hw/misc/esp32_fe.h"
+
+#define DEBUG 0
+
+static uint64_t esp32_fe_read(void *opaque, hwaddr addr, unsigned int size)
+{
+    uint32_t r = 0;
+    Esp32FeState *s = ESP32_FE(opaque);
+    r=s->mem[addr/4];
+    switch(addr){
+      case 0x174:
+      case 0x7C:
+        r=0xffffffff;
+        break;
+    }
+    if(DEBUG) printf("esp32_fe_read  0x%04lx= 0x%08x\n",(unsigned long) addr,r);
+
+    return r;
+}
+
+static void esp32_fe_write(void *opaque, hwaddr addr, uint64_t value,
+                                 unsigned int size) {
+  Esp32FeState *s = ESP32_FE(opaque);
+  if(DEBUG) printf("esp32_fe_write 0x%04lx= 0x%08lx\n",(unsigned long) addr, (unsigned long) value);
+
+  s->mem[addr/4]=(uint32_t)value;
+}
+
+static const MemoryRegionOps esp32_fe_ops = {
+    .read =  esp32_fe_read,
+    .write = esp32_fe_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+};
+
+static void esp32_fe_init(Object *obj)
+{
+    Esp32FeState *s = ESP32_FE(obj);
+    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
+
+    memory_region_init_io(&s->iomem, obj, &esp32_fe_ops, s,
+                          TYPE_ESP32_FE, 0x1000);
+    sysbus_init_mmio(sbd, &s->iomem);
+    memset(s->mem,0,sizeof(s->mem));
+}
+
+
+static const TypeInfo esp32_fe_info = {
+    .name = TYPE_ESP32_FE,
+    .parent = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(Esp32FeState),
+    .instance_init = esp32_fe_init,
+};
+
+static void esp32_fe_register_types(void)
+{
+    type_register_static(&esp32_fe_info);
+}
+
+type_init(esp32_fe_register_types)

@@ -59,10 +59,19 @@
 #define SET_REGFIELD(s, reg, field, data) \
     SET_FIELD((s)->regs[reg], reg ## _ ## field, data)
 
-/* PHY MII registers */
+/* DP83848C PHY MII registers.
+ * Registers 0x0-0xf are standard, 0x10-0x1d are vendor-specific.
+ */
 enum {
-    MII_REG_MAX = 16,
+    MII_PHYSTS = 0x10,
+    MII_REG_MAX = 0x1e
 };
+
+/* DP83848C PHYSTS register bits */
+#define MII_PHYSTS_LINK     (1 << 0)
+#define MII_PHYSTS_SPEED    (1 << 1)
+#define MII_PHYSTS_DUPLEX   (1 << 2)
+#define MII_PHYSTS_ANC      (1 << 4)  /* auto-negotiation complete */
 
 typedef struct Mii {
     uint16_t regs[MII_REG_MAX];
@@ -75,9 +84,12 @@ static void mii_set_link(Mii *s, bool link_ok)
         s->regs[MII_BMSR] |= MII_BMSR_LINK_ST;
         s->regs[MII_ANLPAR] |= MII_ANLPAR_TXFD | MII_ANLPAR_TX |
             MII_ANLPAR_10FD | MII_ANLPAR_10 | MII_ANLPAR_CSMACD;
+        s->regs[MII_PHYSTS] = MII_PHYSTS_LINK | MII_PHYSTS_SPEED |
+            MII_PHYSTS_DUPLEX | MII_PHYSTS_ANC;
     } else {
         s->regs[MII_BMSR] &= ~MII_BMSR_LINK_ST;
         s->regs[MII_ANLPAR] &= 0x01ff;
+        s->regs[MII_PHYSTS] = 0;
     }
     s->link_ok = link_ok;
 }
@@ -116,6 +128,7 @@ static void mii_write_host(Mii *s, unsigned idx, uint16_t v)
         [MII_BMSR] = mii_ro,
         [MII_PHYID1] = mii_ro,
         [MII_PHYID2] = mii_ro,
+        [MII_PHYSTS] = mii_ro,
     };
 
     if (idx < MII_REG_MAX) {
@@ -130,8 +143,11 @@ static void mii_write_host(Mii *s, unsigned idx, uint16_t v)
 
 static uint16_t mii_read_host(Mii *s, unsigned idx)
 {
-    trace_open_eth_mii_read(idx, s->regs[idx]);
-    return s->regs[idx];
+    if (idx < MII_REG_MAX) {
+        trace_open_eth_mii_read(idx, s->regs[idx]);
+        return s->regs[idx];
+    }
+    return 0;
 }
 
 /* OpenCores Ethernet registers */
@@ -334,6 +350,7 @@ static void open_eth_set_link_status(NetClientState *nc)
 static void open_eth_reset(void *opaque)
 {
     OpenEthState *s = opaque;
+    uint8_t *mac_addr = s->conf.macaddr.a;
 
     memset(s->regs, 0, sizeof(s->regs));
     s->regs[MODER] = 0xa000;
@@ -344,6 +361,13 @@ static void open_eth_reset(void *opaque)
     s->regs[COLLCONF] = 0xf003f;
     s->regs[TX_BD_NUM] = 0x40;
     s->regs[MIIMODER] = 0x64;
+
+    SET_REGFIELD(s, MAC_ADDR1, BYTE0, mac_addr[0]);
+    SET_REGFIELD(s, MAC_ADDR1, BYTE1, mac_addr[1]);
+    SET_REGFIELD(s, MAC_ADDR0, BYTE2, mac_addr[2]);
+    SET_REGFIELD(s, MAC_ADDR0, BYTE3, mac_addr[3]);
+    SET_REGFIELD(s, MAC_ADDR0, BYTE4, mac_addr[4]);
+    SET_REGFIELD(s, MAC_ADDR0, BYTE5, mac_addr[5]);
 
     s->tx_desc = 0;
     s->rx_desc = 0x40;
@@ -736,9 +760,13 @@ static void sysbus_open_eth_realize(DeviceState *dev, Error **errp)
 
     sysbus_init_irq(sbd, &s->irq);
 
+    qemu_macaddr_default_if_unset(&s->conf.macaddr);
+
     s->nic = qemu_new_nic(&net_open_eth_info, &s->conf,
                           object_get_typename(OBJECT(s)), dev->id,
                           &dev->mem_reentrancy_guard, s);
+
+    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
 }
 
 static void qdev_open_eth_reset(DeviceState *dev)

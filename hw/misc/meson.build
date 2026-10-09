@@ -251,3 +251,15 @@ system_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
 
 # HPPA devices
 system_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
+
+# BEGIN x4prosim dev-net: shared ESP32-C3 / ESP32-S3 Wi-Fi and RF models.
+esp32_wifi_files = files(
+  'esp32_fe.c',
+  'esp32_phya.c',
+  'esp32s3_wifi.c',
+  'esp32_wifi_ap.c',
+  'esp32_wlan_packet.c',
+)
+system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: esp32_wifi_files)
+system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: esp32_wifi_files)
+# END x4prosim dev-net.

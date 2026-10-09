@@ -138,6 +138,7 @@ config CAN_BUS
 
 config CAN_SJA1000
     bool
+    default y if XTENSA_ESP32 || XTENSA_ESP32S3 || RISCV_ESP32C3
     default y if PCI_DEVICES
     select CAN_BUS
 
