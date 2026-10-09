@@ -286,6 +286,19 @@ static void esp32_soc_realize(DeviceState *dev, Error **errp)
         MemoryRegion *irom = g_new(MemoryRegion, 1);
 
         char name[18];
+        snprintf(name, sizeof(name), "cpu%d-mem", i);
+        memory_region_init(&s->cpu_specific_mem[i], NULL, name, UINT32_MAX);
+
+        CPUState* cs = CPU(&s->cpu[i]);
+        cpu_address_space_init(cs, 0, "cpu-memory", &s->cpu_specific_mem[i]);
+
+        MemoryRegion *cpu_view_sysmem = g_new(MemoryRegion, 1);
+        snprintf(name, sizeof(name), "cpu%d-sysmem", i);
+        memory_region_init_alias(cpu_view_sysmem, NULL, name, sys_mem, 0, UINT32_MAX);
+        memory_region_add_subregion_overlap(&s->cpu_specific_mem[i], 0, cpu_view_sysmem, 0);
+        object_property_set_link(OBJECT(cs), "memory",
+                                 OBJECT(&s->cpu_specific_mem[i]), &error_abort);
+
         snprintf(name, sizeof(name), "esp32.irom.cpu%d", i);
         memory_region_init_rom(irom, NULL, name,
                             memmap[ESP32_MEMREGION_IROM].size, &error_fatal);
@@ -559,8 +572,6 @@ static void esp32_soc_init(Object *obj)
     MachineState *ms = MACHINE(qdev_get_machine());
     char name[16];
 
-    MemoryRegion *system_memory = get_system_memory();
-
     qbus_init(&s->periph_bus, sizeof(s->periph_bus),
                         TYPE_SYSTEM_BUS, DEVICE(s), "esp32-periph-bus");
     qbus_init(&s->rtc_bus, sizeof(s->rtc_bus),
@@ -572,18 +583,6 @@ static void esp32_soc_init(Object *obj)
 
         const uint32_t cpuid[ESP32_CPU_COUNT] = { 0xcdcd, 0xabab };
         s->cpu[i].env.sregs[PRID] = cpuid[i];
-
-        snprintf(name, sizeof(name), "cpu%d-mem", i);
-        memory_region_init(&s->cpu_specific_mem[i], NULL, name, UINT32_MAX);
-
-        CPUState* cs = CPU(&s->cpu[i]);
-        cpu_address_space_init(cs, 0, "cpu-memory", &s->cpu_specific_mem[i]);
-
-        MemoryRegion *cpu_view_sysmem = g_new(MemoryRegion, 1);
-        snprintf(name, sizeof(name), "cpu%d-sysmem", i);
-        memory_region_init_alias(cpu_view_sysmem, NULL, name, system_memory, 0, UINT32_MAX);
-        memory_region_add_subregion_overlap(&s->cpu_specific_mem[i], 0, cpu_view_sysmem, 0);
-        cs->memory = &s->cpu_specific_mem[i];
     }
 
     for (int i = 0; i < ESP32_UART_COUNT; ++i) {
