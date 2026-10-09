@@ -103,3 +103,94 @@ DEF_HELPER_3(ule_d, i32, env, f64, f64)
 
 DEF_HELPER_2(rer, i32, env, i32)
 DEF_HELPER_3(wer, void, env, i32, i32)
+
+DEF_HELPER_4(vld_64_s3, void, env, i32, i64, i32)
+DEF_HELPER_3(vst_64_s3, i64, env, i32, i32)
+DEF_HELPER_4(fft_vst_64_s3, i64, env, i32, i32, i32)
+DEF_HELPER_4(vldbc_s3, void, env, i32, i32, i32)
+DEF_HELPER_3(vldhbc_16_s3, void, env, i32, i64)
+DEF_HELPER_2(set_sar_byte_s3, void, env, i32)
+DEF_HELPER_4(ldqa_64_s3, void, env, i32, i64, i32)
+DEF_HELPER_1(dump_all_s3, void, env)
+DEF_HELPER_3(zero_s3, void, env, i32, i32)
+DEF_HELPER_3(wur_s3, void, env, i32, i32)
+DEF_HELPER_2(rur_s3, i32, env, i32)
+DEF_HELPER_3(mov_qacc_s3, void, env, i32, i32)
+DEF_HELPER_3(movi_a_s3, i32, env, i32, i32)
+DEF_HELPER_4(movi_q_s3, void, env, i32, i32, i32)
+DEF_HELPER_4(vzip_s3, void, env, i32, i32, i32)
+DEF_HELPER_4(vunzip_s3, void, env, i32, i32, i32)
+
+DEF_HELPER_5(vadds_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_5(vsubs_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_6(vmul_s3, void, env, i32, i32, i32, i32, i32)
+DEF_HELPER_6(cmul_s3, void, env, i32, i32, i32, i32, i32)
+
+DEF_HELPER_4(vmulas_accx_s3, void, env, i32, i32, i32)
+DEF_HELPER_4(vmulas_qacc_s3, void, env, i32, i32, i32)
+DEF_HELPER_3(vmulas_qup_s3, void, env, i32, i32)
+DEF_HELPER_5(vsmulas_s3, void, env, i32, i32, i32, i32)
+
+DEF_HELPER_5(srcmb_qacc_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_5(src_q_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_5(vrelu_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_6(vprelu_s3, void, env, i32, i32, i32, i32, i32)
+
+DEF_HELPER_5(vmax_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_5(vmin_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_6(vcmp_s3, void, env, i32, i32, i32, i32, i32)
+
+DEF_HELPER_5(bw_logic_s3, void, env, i32, i32, i32, i32)
+
+DEF_HELPER_5(sxci_2q_s3, void, env, i32, i32, i32, i32)
+DEF_HELPER_4(srcq_64_rd_s3, i64, env, i32, i32, i32)
+DEF_HELPER_5(vsx32_s3, void, env, i32, i32, i32, i32)
+
+DEF_HELPER_5(r2bf_st_low_s3, i64, env, i32, i32, i32, i32)
+DEF_HELPER_5(r2bf_st_high_s3, i64, env, i32, i32, i32, i32)
+
+DEF_HELPER_6(r2bf_s3, void, env, i32, i32, i32, i32, i32)
+
+DEF_HELPER_6(fft_cmul_ld_s3, void, env, i32, i32, i32, i32, i32)
+
+DEF_HELPER_8(fft_cmul_st_low_s3, i64, env, i32, i32, i32, i32, i32, i32, i32)
+DEF_HELPER_8(fft_cmul_st_high_s3, i64, env, i32, i32, i32, i32, i32, i32, i32)
+
+DEF_HELPER_3(bitrev_s3, void, env, i32, i32)
+
+DEF_HELPER_8(fft_ams_s16, void, env, i32, i32, i32, i32, i32, i32, i32)
+
+DEF_HELPER_8(fft_ams_st_0_s16_low, i64, env, i32, i32, i32, i32, i32, i32, i32)
+DEF_HELPER_8(fft_ams_st_1_s16_low, i64, env, i32, i32, i32, i32, i32, i32, i32)
+DEF_HELPER_8(fft_ams_st_0_s16_high, i64, env, i32, i32, i32, i32, i32, i32, i32)
+DEF_HELPER_8(fft_ams_st_1_s16_high, i64, env, i32, i32, i32, i32, i32, i32, i32)
+
+
+DEF_HELPER_8(fft_ams_s16_uqup, void, env, i32, i32, i32, i32, i32, i32, i32)
+DEF_HELPER_4(fft_ams_s16_ld_incp_uaup, void, env, i32, i64, i64)
+DEF_HELPER_8(fft_ams_s16_decp, void, env, i32, i32, i32, i32, i32, i32, i32)
+DEF_HELPER_2(fft_ams_s16_exchange_q, void, env, i32)
+
+DEF_HELPER_1(fft_ams_st_s16_at, i32, env)
+
+DEF_HELPER_4(wr_mask_gpio_out_s3, i32, env, i32, i32, i32)
+
+DEF_HELPER_3(mv_qr_s3, void, env, i32, i32)
+
+DEF_HELPER_2(ld_accx_s3, void, env, i64)
+DEF_HELPER_1(st_accx_s3, i64, env)
+DEF_HELPER_2(srs_accx_s3, i32, env, i32)
+
+DEF_HELPER_3(ld_ua_state_s3, void, env, i64, i32)
+DEF_HELPER_2(st_ua_state_s3, i64, env, i32)
+
+DEF_HELPER_4(ldxq_32_s3, void, env, i32, i32, i32)
+DEF_HELPER_3(stxq_32_s3, i32, env, i32, i32)
+DEF_HELPER_3(ldstxq_addr_s3, i32, env, i32, i32)
+
+
+DEF_HELPER_3(ld_qacc_x_h_32_ip_s3, void, env, i32, i32)
+DEF_HELPER_2(st_qacc_x_h_32_ip_s3, i32, env, i32)
+
+DEF_HELPER_4(ld_qacc_x_l_128_ip_s3, void, env, i32, i32, i64)
+DEF_HELPER_3(st_qacc_x_l_128_ip_s3, i64, env, i32, i32)

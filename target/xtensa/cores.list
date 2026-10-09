@@ -8,3 +8,6 @@ core-lx106.c
 core-sample_controller.c
 core-test_kc705_be.c
 core-test_mmuhifi_c3.c
+core-esp32.c
+core-esp32s3.c
+translate_tie_esp32s3.c

@@ -48,34 +48,7 @@
 #include "exec/helper-info.c.inc"
 #undef  HELPER_H
 
-
-struct DisasContext {
-    DisasContextBase base;
-    const XtensaConfig *config;
-    uint32_t pc;
-    int cring;
-    int ring;
-    uint32_t lbeg_off;
-    uint32_t lend;
-
-    bool sar_5bit;
-    bool sar_m32_5bit;
-    TCGv_i32 sar_m32;
-
-    unsigned window;
-    unsigned callinc;
-    bool cwoe;
-
-    bool debug;
-    bool icount;
-    TCGv_i32 next_icount;
-
-    unsigned cpenable;
-
-    uint32_t op_flags;
-    xtensa_insnbuf_word insnbuf[MAX_INSNBUF_LENGTH];
-    xtensa_insnbuf_word slotbuf[MAX_INSNBUF_LENGTH];
-};
+#include "translate.h"
 
 static TCGv_i32 cpu_pc;
 static TCGv_i32 cpu_R[16];
@@ -85,7 +58,7 @@ static TCGv_i32 cpu_MR[4];
 static TCGv_i32 cpu_BR[16];
 static TCGv_i32 cpu_BR4[4];
 static TCGv_i32 cpu_BR8[2];
-static TCGv_i32 cpu_SR[256];
+TCGv_i32 cpu_SR[256];
 static TCGv_i32 cpu_UR[256];
 static TCGv_i32 cpu_windowbase_next;
 static TCGv_i32 cpu_exclusive_addr;
@@ -308,7 +281,7 @@ static void gen_exception(DisasContext *dc, int excp)
     gen_helper_exception(tcg_env, tcg_constant_i32(excp));
 }
 
-static void gen_exception_cause(DisasContext *dc, uint32_t cause)
+void gen_exception_cause(DisasContext *dc, uint32_t cause)
 {
     TCGv_i32 pc = tcg_constant_i32(dc->pc);
     gen_helper_exception_cause(tcg_env, pc, tcg_constant_i32(cause));
@@ -506,7 +479,7 @@ static uint32_t test_exceptions_hpi(DisasContext *dc, const OpcodeArg arg[],
     return test_exceptions_sr(dc, arg, par);
 }
 
-static MemOp gen_load_store_alignment(DisasContext *dc, MemOp mop,
+MemOp gen_load_store_alignment(DisasContext *dc, MemOp mop,
                                       TCGv_i32 addr)
 {
     if ((mop & MO_SIZE) == MO_8) {
@@ -2617,6 +2590,12 @@ static void translate_wur(DisasContext *dc, const OpcodeArg arg[],
                           const uint32_t par[])
 {
     tcg_gen_mov_i32(cpu_UR[par[0]], arg[0].in);
+}
+
+static void translate_xur_f64(DisasContext *dc, const OpcodeArg arg[],
+                              const uint32_t par[])
+{
+    /* no-op */
 }
 
 static void translate_xor(DisasContext *dc, const OpcodeArg arg[],
@@ -5391,6 +5370,24 @@ static const XtensaOpcodeOps core_ops[] = {
         .translate = translate_wur,
         .par = (const uint32_t[]){EXPSTATE},
     }, {
+        .name = "wur.f64r_lo",
+        .translate = translate_xur_f64,
+    }, {
+        .name = "wur.f64r_hi",
+        .translate = translate_xur_f64,
+    }, {
+        .name = "wur.f64s",
+        .translate = translate_xur_f64,
+    }, {
+        .name = "rur.f64r_lo",
+        .translate = translate_xur_f64,
+    }, {
+        .name = "rur.f64r_hi",
+        .translate = translate_xur_f64,
+    }, {
+        .name = "rur.f64s",
+        .translate = translate_xur_f64,
+    }, {
         .name = "wur.threadptr",
         .translate = translate_wur,
         .par = (const uint32_t[]){THREADPTR},
@@ -6195,13 +6192,13 @@ static inline void put_f32_o1_i1(const OpcodeArg *arg, const OpcodeArg *arg32,
     put_f32_o1_i2(arg, arg32, o0, i0, -1);
 }
 
-static inline void get_f32_o1(const OpcodeArg *arg, OpcodeArg *arg32,
+void get_f32_o1(const OpcodeArg *arg, OpcodeArg *arg32,
                               int o0)
 {
     get_f32_o1_i1(arg, arg32, o0, -1);
 }
 
-static inline void put_f32_o1(const OpcodeArg *arg, const OpcodeArg *arg32,
+void put_f32_o1(const OpcodeArg *arg, const OpcodeArg *arg32,
                               int o0)
 {
     put_f32_o1_i1(arg, arg32, o0, -1);
@@ -6219,13 +6216,13 @@ static inline void put_f32_i2(const OpcodeArg *arg, const OpcodeArg *arg32,
     put_f32_o1_i2(arg, arg32, -1, i0, i1);
 }
 
-static inline void get_f32_i1(const OpcodeArg *arg, OpcodeArg *arg32,
+void get_f32_i1(const OpcodeArg *arg, OpcodeArg *arg32,
                               int i0)
 {
     get_f32_i2(arg, arg32, i0, -1);
 }
 
-static inline void put_f32_i1(const OpcodeArg *arg, const OpcodeArg *arg32,
+void put_f32_i1(const OpcodeArg *arg, const OpcodeArg *arg32,
                               int i0)
 {
     put_f32_i2(arg, arg32, i0, -1);
