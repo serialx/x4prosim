@@ -2845,6 +2845,14 @@ RISCVCPUImpliedExtsRule *riscv_multi_ext_implied_rules[] = {
 };
 
 static const Property riscv_cpu_properties[] = {
+    DEFINE_PROP_UINT8("cost-rom-ns", RISCVCPU, cost_rom_ns, 1),
+    DEFINE_PROP_UINT8("cost-sram-ns", RISCVCPU, cost_sram_ns, 1),
+    DEFINE_PROP_UINT8("cost-flash-ns", RISCVCPU, cost_flash_ns, 1),
+    DEFINE_PROP_UINT8("cost-load", RISCVCPU, cost_load, 0),
+    DEFINE_PROP_UINT8("cost-store", RISCVCPU, cost_store, 0),
+    DEFINE_PROP_UINT8("cost-mul", RISCVCPU, cost_mul, 0),
+    DEFINE_PROP_UINT8("cost-div", RISCVCPU, cost_div, 0),
+    DEFINE_PROP_UINT8("cost-branch", RISCVCPU, cost_branch, 0),
     DEFINE_PROP_BOOL("debug", RISCVCPU, cfg.debug, true),
     DEFINE_PROP_BOOL("big-endian", RISCVCPU, cfg.big_endian, false),
 

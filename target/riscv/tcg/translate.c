@@ -1357,8 +1357,71 @@ static void riscv_tr_init_disas_context(DisasContextBase *dcbase, CPUState *cs)
                          ? MO_BE : MO_LE;
 }
 
+static unsigned riscv_max_insn_cost(RISCVCPU *cpu)
+{
+    unsigned extra = MAX(MAX(cpu->cost_load, cpu->cost_store),
+                         MAX(MAX(cpu->cost_mul, cpu->cost_div),
+                             cpu->cost_branch));
+    unsigned base = MAX(cpu->cost_rom_ns,
+                        MAX(cpu->cost_sram_ns, cpu->cost_flash_ns));
+    return MIN(UINT16_MAX, (uint64_t)(MAX(1, base) + extra) *
+                          MAX(1, cpu->cost_clock_scale));
+}
+
+static unsigned riscv_tr_insn_cost(DisasContextBase *db, CPUState *cs)
+{
+    DisasContext *ctx = container_of(db, DisasContext, base);
+    RISCVCPU *cpu = RISCV_CPU(cs);
+    uint32_t op = ctx->opcode;
+    unsigned extra = 0;
+
+    if (ctx->cur_insn_len == 2) {
+        unsigned quadrant = op & 3, funct3 = op >> 13;
+        if ((quadrant == 0 || quadrant == 2) && funct3 == 2) {
+            extra = cpu->cost_load; /* C.LW / C.LWSP */
+        } else if ((quadrant == 0 || quadrant == 2) && funct3 == 6) {
+            extra = cpu->cost_store; /* C.SW / C.SWSP */
+        } else if ((quadrant == 1 &&
+                    (funct3 == 1 || funct3 >= 5)) ||
+                   (quadrant == 2 && funct3 == 4 &&
+                    (op & 0x7c) == 0 && (op & 0xf80) != 0)) {
+            extra = cpu->cost_branch;
+        }
+    } else {
+        switch (op & 0x7f) {
+        case 0x03:
+            extra = cpu->cost_load;
+            break;
+        case 0x23:
+            extra = cpu->cost_store;
+            break;
+        case 0x63:
+        case 0x67:
+        case 0x6f:
+            extra = cpu->cost_branch;
+            break;
+        case 0x33:
+            if ((op >> 25) == 1) {
+                extra = (op & 0x4000) ? cpu->cost_div : cpu->cost_mul;
+            }
+            break;
+        }
+    }
+    vaddr pc = db->pc_next - ctx->cur_insn_len;
+    unsigned base = cpu->cost_sram_ns;
+    if (pc >= 0x42000000 && pc < 0x42800000) {
+        base = cpu->cost_flash_ns;
+    } else if (pc >= 0x40000000 && pc < 0x40060000) {
+        base = cpu->cost_rom_ns;
+    }
+    return MIN(UINT16_MAX, (uint64_t)(MAX(1, base) + extra) *
+                          MAX(1, cpu->cost_clock_scale));
+}
+
 static void riscv_tr_tb_start(DisasContextBase *db, CPUState *cpu)
 {
+    db->max_insns = MIN(db->max_insns,
+                        UINT16_MAX / riscv_max_insn_cost(RISCV_CPU(cpu)));
 }
 
 static void riscv_tr_insn_start(DisasContextBase *dcbase, CPUState *cpu)
@@ -1442,6 +1505,7 @@ static const TranslatorOps riscv_tr_ops = {
     .insn_start         = riscv_tr_insn_start,
     .translate_insn     = riscv_tr_translate_insn,
     .tb_stop            = riscv_tr_tb_stop,
+    .insn_cost          = riscv_tr_insn_cost,
 };
 
 void riscv_translate_code(CPUState *cs, TranslationBlock *tb,
