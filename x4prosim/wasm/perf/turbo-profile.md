@@ -1,14 +1,173 @@
 # X3 boot profile: native and Wasm64
 
+## After integration: 2026-10-10
+
+The combined changes reach Home in **2.632 s** and settled in **12.648 s**
+in Node with `sleep=off` (three-run medians). **Home < 3.25 s: reached. Settled
+< 10.06 s: not reached.** Home-to-settled is **10.016 s**, also above this
+input's **6.799 s** of guest time. Keep all three changes: the quiet paired
+measurements improve both native and Node, with exact output equality.
+
+| Integrated commit | Origin / experiment | Change |
+| --- | --- | --- |
+| `e179c36f5f` | `c560506e67` / E | avoid clock wakeups for empty auxiliary timer lists |
+| `07a5eb80f4` | `84d7ae00ac` / A | dispatch simple subpage MMIO directly from the CPU |
+| `2b0242509a` | `567f1d7e84` / A | avoid coroutine media checks for ordinary SD images |
+
+All were cherry-picked with `-x` onto `1a5a93d08b`, without conflicts; measured
+code HEAD is `2b0242509a`. B and C offered no change under their profile gates;
+D's Asyncify pruning regressed the post-Home phase and its JSPI prototype did
+not boot. No backend/build-flag changes were selected and no subset was dropped.
+
+### Final clean timings
+
+Same Apple M5 Max, Node 26.11.0, Emscripten 6.0.12, fresh copies of the original
+CrossPoint X3 flash and SD for every run. Default Wasm is `WASM64_MODE=32`
+(`MEMORY64=2`); the native Memory64 mode was rebuilt and smoke-tested too.
+`ps` snapshots before each run showed no competing builds or benchmarks;
+ordinary desktop/system services remained running. All runs were sequential.
+The sleep-off baseline/candidate sequence alternated A/B three times per runtime.
+Each table cell is its own median, so phase medians need not sum to total medians.
+
+| Runtime / icount sleep | Home s | Home → settled s | Settled total s |
+| --- | ---: | ---: | ---: |
+| Native baseline, off | 2.374 | 15.736 | 18.197 |
+| Native integrated, off | 1.798 | 8.686 | 10.878 |
+| Native integrated, on | 4.079 | 11.457 | 15.536 |
+| Node JIT baseline, off | 4.483 | 46.269 | 50.715 |
+| Node JIT integrated, off | 2.632 | 10.016 | 12.648 |
+| Node JIT integrated, on | 4.607 | 12.558 | 17.165 |
+| Node old TCI, on | 15.668 | 89.447 | 105.362 |
+| Chrome JIT integrated, on (one run) | 5.996 | 18.641 | 24.648 |
+
+Chrome 155.0.8059.39 is one fresh-process observation, not a median or a paired
+browser A/B. GPU/WebGL was enabled: ANGLE Metal, Apple M5 Max. Home is timed
+from image loading; navigation-to-Home was **6.007 s**. Settled is measured
+from navigation by the smoke script's 500 ms polling loop; the Chrome phase
+subtracts navigation-to-Home from that settled observation. Neither browser
+milestone meets the corresponding 3.25/10.06 s threshold.
+
+The old TCI port is QEMU 9.2.2, a whole-port comparison rather than an isolated
+backend A/B. It reached and captured settled correctly but did not terminate
+on HMP `quit`. The evidence-only TCI adapter retains the benchmark's timing and
+PPM checks, records SIGTERM after the 30 s shutdown timeout, and excludes that
+post-capture wait from milestone times. The first rejected attempt is retained
+outside the medians. Integrated native/Node and the profile exited normally.
+
+Median paired candidate/baseline ratios (lower is faster):
+
+| Runtime | Home B/A | Home → settled B/A | Settled total B/A |
+| --- | ---: | ---: | ---: |
+| native | 0.7857 | 0.5615 | 0.5978 |
+| wasm | 0.5872 | 0.2143 | 0.2427 |
+
+This is a **75.7% reduction in Node total boot time** and **78.6% reduction in
+its post-Home phase** by paired median ratios. Native total improves **40.2%**;
+there is no measured native regression. These are the combined measured gains,
+not sums of the individual experiment claims.
+
+### Correctness and build acceptance
+
+All 21 clean timing captures, the fresh profile, and both Wasm-mode X3 smoke
+captures match native PPM SHA256
+`b95efa19c1fa99c2abd97fb32ed1a729ecb25a17147198857067ac25523a4c5c`.
+All 12 sleep-off baseline/candidate runs and the profile retain the same eight
+wait lines as the original native reference:
+
+```text
+1115 X3_PON 127; 2050 X3_DRF 935; 2723 X3_DRF 383; 3250 X3_DRF 382
+3741 X3_DRF 382; 4224 X3_DRF 382; 4701 X3_DRF 382; 8747 X3_DRF 382
+```
+
+Settled is guest **10049 ms** in these original inputs, consistent with the
+baseline profile below; the task's earlier 10056 ms is not this observed value.
+Exact timestamp equality is required only with sleep off.
+
+Both Wasm modes build both targets; native riscv32 and xtensa link. Full
+`smoke.sh` and `--rom-only` pass in each Wasm mode. Native AIO (27), block-backend
+(4), and block-drain (30) subtests all pass. Chrome passed panel rendering,
+on-screen Down, keyboard Up, reset, stop, and SD export with guest writes.
+No firmware, `web/`, or `.github/` source changed. X4 Pro coverage remains
+ROM/panel only because no X4 Pro firmware image is available.
+
+### Fresh after profile: remaining Home → settled costs
+
+One separate `sleep=off` Node CPU profile, excluded from the medians, reaches
+Home at **2.511 s** and settled at **12.663 s**
+(phase **10.152 s**). The analyzer selects the vCPU and crops
+samples at the serial milestones. Percentages represent sampled elapsed time,
+including waits, not exact CPU consumption; a single profile is exploratory.
+
+| vCPU category | Home self % | Home → settled self % | Post-Home sampled ms |
+| --- | ---: | ---: | ---: |
+| Helpers / softmmu / MMIO | 27.84 | 29.59 | 3004.0 |
+| Other QEMU / runtime | 19.14 | 21.49 | 2181.5 |
+| Wait | 15.19 | 15.51 | 1574.5 |
+| Dispatch / main loop / timers / icount | 11.48 | 12.82 | 1302.0 |
+| JIT TB modules | 10.04 | 10.90 | 1106.9 |
+| Asyncify / fibers (visible) | 2.25 | 2.26 | 229.5 |
+| TCI / libffi | 4.24 | 2.21 | 224.3 |
+| JS glue / V8 | 3.12 | 1.47 | 149.1 |
+| Translation / lookup | 4.84 | 1.18 | 119.9 |
+| Module constructors / hooks | 0.76 | 0.22 | 22.1 |
+| Device models (combined) | 1.10 | 2.35 | 238.6 |
+
+| Rank | Home → settled self symbol | Sampled ms | Self % |
+| ---: | --- | ---: | ---: |
+| 1 | `_do_futex_wait` | 1574.5 | 15.51 |
+| 2 | `TB entry (generated modules)` | 1106.9 | 10.90 |
+| 3 | `cpu_tb_exec` | 813.8 | 8.02 |
+| 4 | `do_ld_mmio_beN` | 646.6 | 6.37 |
+| 5 | `do_ld4_mmu` | 396.6 | 3.91 |
+| 6 | `access_with_adjusted_size` | 329.3 | 3.24 |
+| 7 | `memory_region_dispatch_read` | 290.5 | 2.86 |
+| 8 | `do_proxy` | 246.4 | 2.43 |
+| 9 | `qemu_mutex_lock_impl` | 237.2 | 2.34 |
+| 10 | `mmu_lookup1` | 233.8 | 2.30 |
+
+Compared with the original three-profile baseline below, post-Home wait share
+falls from **50.98% to 15.51%**, and visible Asyncify from **7.09% to 2.26%**.
+Helpers/MMIO rises in relative share from **15.17% to 29.59%** because the whole
+phase is much shorter; that percentage increase is not a measured regression.
+Generated TB self time is now **10.90%** (1.107 sampled seconds), so it merits
+re-evaluation after the larger host overhead reductions. TCI/libffi remains
+only **2.21%**. The profile sees 548 new modules before Home and 939 afterward;
+post-Home synchronous compile/instantiate time is only **24.70 ms**. No new
+instruction-share or fiber-count instrumentation was enabled in this run.
+
+Remaining wait stacks include BQL acquisition from `do_ld_mmio_beN` (190.6 ms
+in the largest single sampled stack), synchronous JavaScript `poll` from
+`blk_pread` (118.0 ms), and read/write completion notification proxies (109.8 /
+96.0 ms in the displayed stacks). Those are individual stacks, not complete
+per-cause totals. The leading direct costs are MMIO/helper access and TB dispatch.
+
+To reach settled below 10.06 s, remove **more than 2.588 s (20.5%)** from the
+current total. To also beat the guest's post-Home phase, remove **more than
+3.217 s (32.1%)** from that phase. Even native takes 8.686 s after Home, so
+matching native alone would miss the phase goal. The sampled 1.575 s wait pool
+cannot by itself cover that phase gap if this profile is representative.
+The next experiments should target repeated MMIO/helper/dispatch work together
+with remaining BQL and block-I/O proxy costs, preserving every guest access and
+virtual deadline. No further optimization was attempted during integration.
+
+Raw evidence is under `build-wasm/evidence/integration/`: `measurements.json`
+and per-run `run.json`/logs/PPMs, `ps-*.txt`, `chrome/web-measurements.json`,
+`after-profile/wasm-1/`, and `after-profile-analysis.json`. The durable execution
+report is `build-wasm/evidence/integration-report.txt`. The existing
+[profiling commands](README.md) reproduce the final profile; the evidence-only
+`measure.py` imports `benchmark.run` and records the baseline/candidate labels.
+
+## Baseline profile before integration
+
 The first optimization target is host synchronization around MMIO and event
 notification. In Home-to-settled, the Wasm vCPU spends **50.98% of sampled elapsed
 time waiting**, **15.17% in helpers/softmmu/MMIO**, and **7.09% in visible Asyncify
 code**. JIT coverage is already **96.884% of guest instruction starts**; lowering
 the compilation threshold alone cannot plausibly provide the required speedup.
 
-This report measures the unmodified integration branch at `54fe80175f`, including
-the learned Wasm MMIO boundary hint from `a614e3c07d`. It proposes experiments;
-**no optimization or QEMU instrumentation is committed**. Tools and reproduction
+This baseline profile measured the unmodified integration branch at `54fe80175f`, including
+the learned Wasm MMIO boundary hint from `a614e3c07d`. It proposed experiments;
+**no optimization or QEMU instrumentation was committed for that profile**. Tools and reproduction
 commands are in [README.md](README.md). Raw paths below are relative to
 `build-wasm/evidence/profile/` in the measurement worktree, and are intentionally
 not committed.
