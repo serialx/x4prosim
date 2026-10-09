@@ -1,0 +1,76 @@
+wait:25
+hmp:qom-set /machine/gt911 tap 240,529
+wait:6
+hmp:qom-set /machine/gt911 tap 416,106
+wait:6
+hmp:qom-set /machine/gt911 tap 240,177
+wait:6
+shot:OUT-1.png
+hmp:qom-set /machine/gt911 tap 240,218
+wait:8
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+hmp:qom-set /machine/gt911 tap 447,573
+wait:2
+shot:OUT-2.png
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+hmp:qom-set /machine/gt911 tap 433,693
+wait:2
+wait:2
+shot:OUT-3.png
+hmp:qom-set /machine/gt911 tap 26,55
+wait:8
+shot:OUT-4.png
+hmp:qom-set /machine/gt911 tap 420,507
+wait:10
+shot:OUT-5.png
+hmp:qom-set /machine/gt911 tap 420,507
+wait:10
+shot:OUT-6.png
+hmp:qom-set /machine/gt911 tap 420,507
+wait:10
+shot:OUT-7.png
+hmp:qom-set /machine/gt911 tap 420,507
+wait:10
+shot:OUT-8.png
+hmp:qom-set /machine/gt911 tap 420,507
+wait:10
+shot:OUT-9.png
+hmp:qom-set /machine/gt911 tap 420,507
+wait:10
+shot:OUT-10.png

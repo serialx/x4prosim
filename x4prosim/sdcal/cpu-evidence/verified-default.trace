@@ -1,0 +1,4 @@
+Adding SPI flash device
+esp32c3_cpu_clock hz=80000000 factor=2 sysclk=0x000a8401 cpu_per_conf=0x00000000
+esp32c3_cpu_clock hz=160000000 factor=1 sysclk=0x000a8400 cpu_per_conf=0x00000001
+esp32c3_cpu_clock hz=10000000 factor=16 sysclk=0x000a8003 cpu_per_conf=0x00000001

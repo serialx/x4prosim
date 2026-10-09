@@ -1,0 +1,459 @@
+### /api/status 2026-10-03T03:05:14Z {"version":"1.6.0-test-combined-dink-1002p+1791d","ip":"192.0.2.67","mode":"STA","rssi":-53,"freeHeap":105112,"uptime":96,"logOnly":true}
+=== CrossDink log dump: device=xteink_x4_pro serial=000000000000 fw=1.6.0-test-combined-dink-1002p+1791d sha=1791ddac env=x4-pro-debug build=4283
+=== panel=UC8179 variant=0x01 via bus probe (VER/FLG) VER=00 00 01 FF FF productId=580000 lutVer=0000030000000000000000000000
+=== sec: fenc=off sboot=0 usbjtag=on jtag=on dl=on locked=0
+=== uptime=0:01:36 heap free=105084 min=83016 maxAlloc=63476 psram free=6951056 ===
+
+=== boot: PSRAM log reset, restart #0, reset reason 8, ring@0x3c590000 ===
+[34] [INF] [BOOT] fw=1.6.0-test-combined-dink-1002p+1791d sha=1791ddac br=test/combined-dink-1002p env=x4-pro-debug build=4283 2026-10-03T00:14Z part=app0 reset=DEEPSLEEP
+[34] [INF] [BOOT] Reset diagnostic: reset=8(DEEPSLEEP) sleepWake=3(EXT1)
+[34] [INF] [BOOT] last sleep: reason=request act=Library awake=3154 s slept=3 s
+[34] [INF] [BOOT] sec: fenc=off sboot=0 usbjtag=on jtag=on dl=on locked=0
+[205] [INF] [PWR] Auto light sleep enabled (80-240 MHz)
+[205] [INF] [STATPAD] prev boot GPIO21 gpio=0 rtc=0 | dig ie=0 pd=0 pu=0 slpsel=0 | rtc mux=1 ie=1 slpie=0 slpsel=0 rde=1 rue=0 | rtcwake en=0 type=0 st=0 hold=0 | raw iomux=00000800 pad=50082000 pin=00000000
+[205] [INF] [STATPAD] boot GPIO21 gpio=0 rtc=0 | dig ie=0 pd=0 pu=0 slpsel=0 | rtc mux=1 ie=1 slpie=0 slpsel=0 rde=1 rue=0 | rtcwake en=0 type=0 st=0 hold=0 | raw iomux=00000800 pad=50082000 pin=00000000
+[205] [INF] [WAKE] Cleared RTC IO wakes left armed: GPIO mask 0x000489
+[206] [INF] [WAKE] Input wake armed on 5 line(s)
+[401] [DBG] [GYR] No IMU on this board
+[401] [INF] [CLK] SDK RTC found
+[402] [INF] [MAIN] Device: xteink_x4_pro
+[402] [INF] [BOOT] Wake route: PowerButton (reset reason 8, wakeup cause 3)
+[643] [INF] [SD] SDMMC card mounted
+[643] [DBG] [BOOTMEM] storage ready: free=175600 maxAlloc=131060
+[674] [DBG] [CPS] Settings loaded from file
+[695] [INF] [KNOB] flashGrayDarkDimMs = -800 (default 0)
+[695] [INF] [KNOB] flashGrayDarkRestoreMs = -600 (default -300)
+[696] [INF] [KNOB] boot: record reset (reset 8), unfinished boots before this 0, knobs.json loaded, 2 knobs
+[696] [INF] [SD] Installed RTC-backed SD timestamp callback
+[727] [INF] [BAT] 1790996579,2026-10-02 20:02:59,727,63.52,3810,0,0,29.0,0,wake,reset=DEEPSLEEP wake=EXT1
+[741] [DBG] [UI] Using Lyra theme
+[741] [DBG] [BOOTMEM] boot state ready: free=170736 maxAlloc=118772
+[741] [INF] [FrontlightMgr] releaseOnWake: cleared pad holds (unconditional)
+[743] [INF] [FrontlightMgr] begin: cleared any stale held pads
+[743] [INF] [FrontlightMgr] begin: attached gpio=8 warm=9 ok=1
+[743] [INF] [LIGHT] Frontlight up: 1% warm=83% on
+[744] [INF] [BAT] 1790996579,2026-10-02 20:02:59,744,63.52,3810,0,0,29.0,1,light,
+[744] [DBG] [MAIN] Starting CrossDink version 1.6.0-test-combined-dink-1002p+1791d
+[744] [INF] [MEM] Boot: heap free=170572 total=264972 min=160984 maxAlloc=118772 psram free=7210040 total=7246188 min=7194212 maxAlloc=7077876
+[968] [DBG] [EPD] Wait complete: 8179_otp_ready (0 ms)
+[970] [INF] [EPD] 8179 OTP VCOM from NVS cache, 2 ms
+[970] [INF] [MAIN] No retained panel frame; first paint full
+[970] [DBG] [PANEL] controller=UC8179 variant=0x01 via bus probe (VER/FLG) promoted=1
+[970] [DBG] [PANEL] VER=00 00 01 FF FF FLG=13 verdict=1 busyTimeout=0 productId=580000 lutVer=0000030000000000000000000000
+[970] [DBG] [PANEL] MTP[0x000..0x02F]: 05 0A 0F 14 50 5A 64 7F FF FF FF A5 1F 27 27 36 17 00 29 07 22 64 02 58 00 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+[970] [DBG] [ACT] Render task started with 24576-byte stack
+[971] [DBG] [SDFS] SD font resolver ready; selected font load deferred until requested
+[971] [DBG] [BOOTMEM] display and font resolver ready: free=143924 maxAlloc=94196
+[971] [DBG] [ACT] Entering activity: Home
+[1148] [DBG] [FrontlightMgr] apply: brightness=1 level=2 totalDuty=1 coolDuty=0 warmDuty=1 lit=1
+[1161] [DBG] [LIGHT] Flash duck: down, dark in 172 ms
+[1336] [DBG] [EPD] Wait complete: 8179_PON (127 ms)
+[1336] [DBG] [EPD] SPI full: 1 planes 27 ms
+[1342] [DBG] [LIGHT] Flash duck: plan to dark 584 ms, input to dark 1737 ms (kind 1)
+[1546] [DBG] [LIGHT] Flash duck: dark at 1546 (DRF+209)
+[1585] [DBG] [IN] #1 btn power up
+[1647] [DBG] [FrontlightMgr] apply: brightness=0 level=0 totalDuty=0 coolDuty=0 warmDuty=0 lit=0
+[2007] [INF] [MEM] Periodic: heap free=139312 total=264972 min=135236 maxAlloc=94196 psram free=6999868 total=7246188 min=6999868 maxAlloc=6946804
+[2010] [INF] [STK] lowest free stack (bytes): IDLE0:736 IDLE1:792 ipc0:1092 arduino_usb_eve:1152 ipc1:1260 Tmr Svc:1856 arduino_events:3044 pinmon:3076 | loopTask:7736/12288 render:17988
+[2010] [DBG] [PERF] sd open=13 miss=3 rd=20KB/21ms wr=0KB/0ms img hit=0 dec=0/0ms
+[2012] [DBG] [PM] 2s: act=- sleep=0% cpumax=76% ls=0 rej=0 wake=gpio:1(btn 1,touch 0) timer:0 cause=t:0 g:0 w:0 o:0 loop=78 top=crossdink-activ 65%,epd-refresh 38%,rtos0 21%
+[2038] [DBG] [LIGHT] Flash duck: up at 0%
+[2338] [DBG] [LIGHT] Flash duck: restored at 2338 (end-498), duty 1%
+[2602] [DBG] [FrontlightMgr] apply: brightness=1 level=2 totalDuty=1 coolDuty=0 warmDuty=1 lit=1
+[2832] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[2965] [DBG] [EPD] Wait complete: 8179_TSC (106 ms)
+[2966] [DBG] [EPD] 8179 TSC raw 0x1C = 28 C
+[2966] [DBG] [BOOT] t start=402 sd=241 settings=98 probe=145 panel=84 display=1 route=116 ink=1879 first_ink=2966
+[2966] [DBG] [BOOT] first ink at 2966 ms
+[3807] [DBG] [IN] #2 tap 237,404 (panel 505,505)
+[3807] [DBG] [LAT] #1 in=btn act=- superseded by #2
+[3808] [DBG] [ACT] Exiting activity: Home
+[3809] [DBG] [ACT] Entering activity: Library
+[3892] [DBG] [LIB] Card unchanged since last scan; reusing index
+[3982] [DBG] [LOOP] New max loop duration: 176 ms (activity Library: 175 ms, rest of loop: 1 ms)
+[4017] [INF] [MEM] Periodic: heap free=138564 total=264972 min=135236 maxAlloc=94196 psram free=7012604 total=7246188 min=6995732 maxAlloc=6946804
+[4020] [INF] [CPU] core0 14% core1 2% over 2009 ms act=Library | loopTask(0)14% ActivityManager(1)2% tiT(0)0%
+[4020] [DBG] [PERF] sd open=3 miss=0 rd=38KB/68ms wr=0KB/0ms img hit=0 dec=0/0ms
+[4022] [DBG] [PM] 2s: act=Home sleep=36% cpumax=35% ls=14 rej=1 wake=gpio:9(btn 0,touch 9) timer:5 cause=t:13 g:1 w:0 o:1 rjc=0x0 loop=104 top=epd-refresh 48%,rtos0 20%,crossdink-activ 15%
+[4326] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[4892] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[4920] [DBG] [LAT] #2 in=tap act=Library path=- queue=175 render=346 ink=592 total=1113
+[5035] [INF] [STATPAD] 5s GPIO21 gpio=0 rtc=0 | dig ie=1 pd=1 pu=0 slpsel=0 | rtc mux=0 ie=1 slpie=0 slpsel=0 rde=1 rue=0 | rtcwake en=0 type=0 st=0 hold=0 | raw iomux=00001a80 pad=50002000 pin=00000000
+[5649] [DBG] [IN] #3 swipe left 393,329->197,391 (panel 411,179->489,588)
+[5687] [DBG] [SD] RBPR: open for read failed: /.crossdink/epub_3464334372671844247/progress_percent.bin
+[5704] [DBG] [SD] RBPR: open for read failed: /.crossdink/epub_3464334372671844247/progress_percent.bin
+[6263] [DBG] [SDW] write - crossdink/epub_3464334372671844247/progress_percent.bin 7 B 550 ms
+[6263] [DBG] [LOOP] New max loop duration: 615 ms (activity Library: 613 ms, rest of loop: 2 ms)
+[6277] [INF] [CPU] core0 16% core1 12% over 2257 ms act=Library | loopTask(0)16% ActivityManager(1)12% tiT(0)0%
+[6277] [DBG] [PERF] sd open=24 miss=2 rd=43KB/83ms wr=0KB/550ms img hit=0 dec=0/0ms
+[6327] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[6555] [DBG] [SDW] write EBP rossdink/epub_3464334372671844247/thumb_112x168.bmp.tmp 2750 B 17 ms
+[6591] [DBG] [SDW] rename /.crossdink/epub_3464334372671844247/thumb_112x168.bmp.tmp -> /.crossdink/epub_3464334372671844247/thumb_112x168.bmp
+[6888] [DBG] [EPD] Wait complete: 8179_DRF (244 ms)
+[6945] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[7557] [DBG] [SDW] write EBP ossdink/epub_11375406111834092552/thumb_112x168.bmp.tmp 2750 B 27 ms
+[7572] [DBG] [SDW] rename /.crossdink/epub_11375406111834092552/thumb_112x168.bmp.tmp -> /.crossdink/epub_11375406111834092552/thumb_112x168.bmp
+[7573] [DBG] [LOOP] New max loop duration: 624 ms (activity Library: 623 ms, rest of loop: 1 ms)
+[7574] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[7601] [DBG] [LAT] #3 in=swipe act=Library path=- queue=614 render=66 ink=1272 total=1952
+[7658] [INF] [WCS] load start
+[7664] [INF] [WCS] load JSON complete
+[7714] [INF] [GDY] wifi remote: rejoining ShinyDERP (join task 56 ms)
+[7715] [DBG] [STK] exit WifiJoin: min free 3324
+[7723] [DBG] [EPD] SPI fast: 2 planes 55 ms
+[8287] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[8307] [INF] [MEM] Periodic: heap free=111228 total=264972 min=104568 maxAlloc=63476 psram free=6995060 total=7246188 min=6974408 maxAlloc=6946804
+[8310] [INF] [CPU] core0 40% core1 14% over 2033 ms act=Library | loopTask(0)36% ActivityManager(1)13% ipc1(1)0% tiT(0)0% sys_evt(0)0%
+[8310] [DBG] [PERF] sd open=10 miss=0 rd=201KB/305ms wr=5KB/45ms img hit=0 dec=0/0ms
+[8312] [DBG] [WEB] [MEM] Free heap before begin: 110760 bytes
+[8312] [DBG] [WEB] Network mode: STA
+[8312] [DBG] [WEB] Creating web server on port 80...
+[8313] [INF] [WEB] idle modem sleep MAX (log-only), listen_interval 3 (next association)
+[8315] [DBG] [WEB] [MEM] Free heap after server.begin(): 109824 bytes
+[8315] [DBG] [WEB] Serving on core 1
+[8315] [DBG] [WEB] handleClient active, server running on port 80
+[8317] [INF] [GDY] wifi remote on: http://192.0.2.67/api/psram-log
+[8592] [INF] [BAT] 1790996586,2026-10-02 20:03:06,8592,63.51,3818,0,0,29.0,1,wifi_on,
+[8644] [DBG] [IN] #4 tap 12,53 (panel 66,974)
+[8698] [DBG] [EPD] SPI fast: 2 planes 56 ms
+[8707] [DBG] [ACT] Exiting activity: Library
+[8707] [DBG] [ACT] Entering activity: Home
+[9259] [DBG] [LAT] #4 in=tap act=Home path=- queue=135 render=480 ink=0 total=615
+[9259] [DBG] [EPD] Wait complete: 8179_DRF (403 ms)
+[9316] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[9880] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[10326] [INF] [MEM] Periodic: heap free=108808 total=264972 min=103760 maxAlloc=63476 psram free=6958220 total=7246188 min=6928864 maxAlloc=6946804
+[10329] [INF] [CPU] core0 15% core1 15% over 2018 ms act=Home | ActivityManager(1)13% loopTask(0)11% wifi(0)3% tiT(0)0% esp_timer(0)0%
+[10329] [DBG] [PERF] sd open=9 miss=1 rd=11KB/18ms wr=0KB/0ms img hit=0 dec=0/0ms
+[10331] [DBG] [PM] 6s: act=Library sleep=15% cpumax=66% ls=27 rej=0 wake=gpio:29(btn 0,touch 29) timer:0 cause=t:23 g:2 w:2 o:0 loop=207 top=epd-refresh 58%,crossdink-activ 54%,rtos0 28%
+[10691] [DBG] [IN] #5 tap 300,392 (panel 490,373)
+[10693] [DBG] [ACT] Exiting activity: Home
+[10693] [DBG] [ACT] Entering activity: Library
+[10777] [DBG] [LIB] Card unchanged since last scan; reusing index
+[11210] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[11776] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[11804] [DBG] [LAT] #5 in=tap act=Library path=- queue=175 render=345 ink=592 total=1112
+[12038] [DBG] [IN] #6 swipe left 398,399->154,422 (panel 499,169->528,678)
+[12151] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[12347] [INF] [MEM] Periodic: heap free=108132 total=264972 min=103760 maxAlloc=63476 psram free=6971132 total=7246188 min=6928864 maxAlloc=6946804
+[12350] [INF] [CPU] core0 16% core1 19% over 2020 ms act=Library | ActivityManager(1)18% loopTask(0)15% wifi(0)0% WebServer(1)0% tiT(0)0%
+[12350] [DBG] [PERF] sd open=25 miss=0 rd=72KB/146ms wr=0KB/0ms img hit=0 dec=0/0ms
+[12352] [DBG] [PM] 2s: act=Home sleep=13% cpumax=65% ls=9 rej=0 wake=gpio:26(btn 0,touch 26) timer:0 cause=t:8 g:1 w:0 o:0 loop=92 top=crossdink-activ 52%,epd-refresh 39%,rtos1 26%
+[12717] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[12745] [DBG] [LAT] #6 in=swipe act=Library path=- queue=11 render=104 ink=592 total=707
+[12965] [DBG] [IN] #7 tap 77,313 (panel 391,839)
+[12970] [DBG] [ACT] Exiting activity: Library
+[12970] [DBG] [ACT] Entering activity: Reader
+[13067] [INF] [EBP] Loaded X locations: 2914 locations, 652 reference pages across 80 spine items
+[13091] [DBG] [SD] EBP: open for read failed: /.crossdink/epub_3464334372671844247/optimizer-images.idx
+[13184] [DBG] [ZIP] Stream META-INF/crossink/optimizer-v1.json: ok=1 lookup=15999us read/inflate=12725us write=27022us bytes=9690
+[13187] [DBG] [SDW] write EBP b_3464334372671844247/optimizer-images.idx.manifest.tmp 9690 B 26 ms
+[13187] [DBG] [EBP] Extracted META-INF/crossink/optimizer-v1.json: ok=1 bytes=9690 stream=57ms flush/close=2ms chunk=256
+[13270] [DBG] [SDW] remove /.crossdink/epub_3464334372671844247/optimizer-images.idx.manifest.tmp
+[13287] [DBG] [SDW] write EBP sdink/epub_3464334372671844247/optimizer-images.idx.tmp 1312 B 6 ms
+[13307] [DBG] [SDW] rename /.crossdink/epub_3464334372671844247/optimizer-images.idx.tmp -> /.crossdink/epub_3464334372671844247/optimizer-images.idx
+[13307] [INF] [EBP] COIX: 6 records
+[13309] [DBG] [ACT] Exiting activity: Reader
+[13309] [DBG] [ACT] Entering activity: EpubReader
+[13309] [INF] [EPS] reader enter: internal free=107444 max=40948; psram free=6969784 max=6946804 total=7246188
+[13467] [DBG] [SDREG] Font index: loaded 33 names, no family paths
+[13489] [DBG] [SDREG] Font index: loaded 8 files for Bitter
+[13494] [DBG] [SDCF] Style 1: sharing style 0's 25-interval table (150 B not allocated)
+[13495] [DBG] [SDCF] Style 2: sharing style 0's 25-interval table (150 B not allocated)
+[13497] [DBG] [SDCF] Style 3: sharing style 0's 25-interval table (150 B not allocated)
+[13497] [DBG] [SDCF] Loaded: /.fonts/Bitter/Bitter_12.cpfont (v4, 4 styles)
+[13497] [DBG] [SDMGR] Loaded /.fonts/Bitter/Bitter_12.cpfont size=12 id=-1949777969 styles=4
+[13497] [DBG] [SDFS] Bitter has no CJK coverage - skipping UI fallback sizes
+[13497] [DBG] [SDFS] Loaded SD font family: Bitter
+[13498] [DBG] [SDFS] Releasing SD font catalog (33 families)
+[13542] [DBG] [ERS] Reading stats loaded: totalReadingSeconds=142 totalPagesTurned=15 avg=16 samples=2 cumulativeAvg=9
+[13562] [DBG] [SDW] write - /.crossdink/state.json 835 B
+[13710] [DBG] [SDW] write - /.crossdink/recent.json.tmp 3175 B
+[13733] [DBG] [SDW] rename /.crossdink/recent.json -> /.crossdink/recent.json.bak
+[13753] [DBG] [SDW] rename /.crossdink/recent.json.tmp -> /.crossdink/recent.json
+[13774] [DBG] [SDW] remove /.crossdink/recent.json.bak
+[13775] [DBG] [LOOP] New max loop duration: 810 ms (activity EpubReader: 809 ms, rest of loop: 1 ms)
+[13776] [DBG] [ERS] Loading file: OEBPS/xhtml/00_Cover.xhtml, index: 0 (free=104716, maxAlloc=40948)
+[13783] [DBG] [ERS] Released SD font caches after uncached section build: free=104716->104716 maxAlloc=40948->40948
+[13784] [DBG] [ERS] Cache not found, building... (free=104716, maxAlloc=40948)
+[13796] [DBG] [SCT] Start incremental section build: spine=0 mode=0 preview=0 viewport=464x761 image=0 focus=0 guide=0 free=104048 maxAlloc=40948
+[13832] [DBG] [SDW] mkdir /.crossdink/epub_3464334372671844247/sections
+[13869] [DBG] [SDW] mkdir /.crossdink/epub_3464334372671844247/html
+[13903] [DBG] [ZIP] Stream OEBPS/xhtml/00_Cover.xhtml: ok=1 lookup=18721us read/inflate=1275us write=4114us bytes=921
+[13906] [DBG] [SDW] write SCT /.crossdink/epub_3464334372671844247/html/.tmp_0.html 921 B 4 ms
+[13918] [DBG] [SDW] rename /.crossdink/epub_3464334372671844247/html/.tmp_0.html -> /.crossdink/epub_3464334372671844247/html/0.html
+[13958] [DBG] [EHP] Section advance prewarm: codepoints=25 time=20 ms free=96352 maxAlloc=40948
+[13972] [DBG] [EHP] Time to parse and build pages: 36 ms (free=94952, maxAlloc=40948)
+[13978] [DBG] [SDW] write SCT .crossdink/epub_3464334372671844247/sections/0.bin.part 235 B 3 ms
+[13994] [DBG] [SDW] rename /.crossdink/epub_3464334372671844247/sections/0.bin.part -> /.crossdink/epub_3464334372671844247/sections/0.bin
+[13994] [DBG] [SCT] Section built: spine=0 pages=1 bytes=208 wall_ms=202
+[13998] [DBG] [ERS] primary section cache built: spine=0 font=-1949777969 mode=0 embedded=0 focus=0 guide=0 pages=1 free=103172 maxAlloc=40948 building=0
+[13999] [DBG] [ERS] Released SD font caches after section cache build: free=103172->104276 maxAlloc=40948->40948
+[13999] [DBG] [ERS] Cache build complete: pages=1 font=-1949777969 mode=0 free=104276 maxAlloc=40948
+[14004] [DBG] [ERS] Resolved visible text offset 0 to page 0
+[14010] [DBG] [ERDM] Skipping touch reader preview outside the 8 KiB/256-run snapshot budget
+[14026] [DBG] [ERS] Image caches building in background: 1 image(s), first /.crossdink/epub_3464334372671844247/img_0_0.jpg
+[14105] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[14121] [DBG] [INF] Window: bytes=32768 pool=psram psramReserve=131072
+[14347] [INF] [MEM] Periodic: heap free=88832 total=264972 min=83016 maxAlloc=40948 psram free=6856740 total=7246188 min=6856740 maxAlloc=6815732
+[14364] [INF] [CPU] core0 36% core1 10% over 2013 ms act=EpubReader | loopTask(0)30% ActivityManager(1)9% wifi(0)0% WebServer(1)0% tiT(0)0%
+[14364] [DBG] [PERF] sd open=76 miss=9 rd=62KB/238ms wr=34KB/127ms img hit=0 dec=0/0ms
+[14366] [DBG] [PM] 2s: act=Library sleep=7% cpumax=78% ls=5 rej=0 wake=gpio:8(btn 0,touch 8) timer:0 cause=t:4 g:1 w:0 o:0 loop=63 top=crossdink-activ 61%,sdmmc 51%,rtos0 42%
+[14497] [DBG] [ZIP] Stream META-INF/crossink/pxc/5f2130897f79c5584e3c.pxc: ok=1 lookup=24836us read/inflate=227969us write=146480us bytes=37444
+[14504] [DBG] [SDW] write EBP k/epub_3464334372671844247/img_0_0.pxc.optimizer.source 37444 B 145 ms
+[14504] [DBG] [EBP] Extracted META-INF/crossink/pxc/5f2130897f79c5584e3c.pxc: ok=1 bytes=37444 stream=402ms flush/close=6ms chunk=256
+[14666] [DBG] [LAT] #7 in=tap act=EpubReader path=draw queue=810 render=891 ink=0 total=1701
+[14666] [DBG] [EPD] Wait complete: 8179_DRF (561 ms)
+[15734] [DBG] [IN] #8 swipe up 162,794->170,638 (panel 993,661->798,645)
+[15746] [DBG] [SD] DICT: open for read failed: /.crossdink/epub_3464334372671844247/dictionary.bin
+[15761] [DBG] [ACT] Entering activity: EpubReaderDrawer
+[15768] [DBG] [DREG] Found dictionary: Oxford English/english-Oxford-2005
+[15772] [DBG] [DREG] Found dictionary: en/dict-data
+[15773] [DBG] [DREG] Discovery complete: 2 dictionaries in /.dictionaries
+[15785] [DBG] [SD] DICT: open for read failed: /.crossdink/epub_3464334372671844247/dictionary.bin
+[15836] [DBG] [EPD] SPI fast: 2 planes 55 ms
+[16051] [DBG] [SDW] write EBP dink/epub_3464334372671844247/img_0_0.pxc.optimizer.tmp 37444 B 338 ms
+[16083] [DBG] [SDW] rename /.crossdink/epub_3464334372671844247/img_0_0.pxc.optimizer.tmp -> /.crossdink/epub_3464334372671844247/img_0_0.pxc
+[16097] [DBG] [SDW] remove /.crossdink/epub_3464334372671844247/img_0_0.pxc.optimizer.source
+[16098] [DBG] [ERS] Image caches done: 1 in 2072ms, stack left 8560
+[16351] [INF] [MEM] Periodic: heap free=103096 total=264972 min=83016 maxAlloc=40948 psram free=6892932 total=7246188 min=6856740 maxAlloc=6815732
+[16380] [INF] [CPU] core0 58% core1 4% over 2015 ms act=EpubReaderDrawer | loopTask(0)18% ActivityManager(1)4% wifi(0)0% WebServer(1)0% tiT(0)0%
+[16380] [DBG] [PERF] sd open=15 miss=2 rd=43KB/1025ms wr=50KB/396ms img hit=0 dec=0/0ms
+[16382] [DBG] [PM] 2s: act=EpubReader sleep=0% cpumax=87% ls=0 rej=0 wake=gpio:16(btn 0,touch 16) timer:0 cause=t:0 g:0 w:0 o:0 loop=100 top=sdmmc 65%,rtos0 64%,crossdink-activ 59%
+[16397] [DBG] [LAT] #8 in=swipe act=EpubReaderDrawer path=- queue=60 render=603 ink=0 total=663
+[16397] [DBG] [EPD] Wait complete: 8179_DRF (561 ms)
+[17352] [DBG] [ACT] Exiting activity: EpubReaderDrawer
+[17357] [DBG] [ERDM] Skipping touch reader preview outside the 8 KiB/256-run snapshot budget
+[17370] [DBG] [IMG] Local image cache hit: /.crossdink/epub_3464334372671844247/img_0_0.jpg
+[17397] [INF] [EPS] Retained PXC in PSRAM: bytes=37440 total=37440 entries=2 dimensions=312x480
+[17397] [INF] [EPS] pxc retained: internal free=103516 max=40948; psram free=6861096 max=6815732 total=7246188
+[17456] [DBG] [EPD] 8179: gray base skipped, full swing sets every pixel
+[17463] [DBG] [IN] #9 swipe up 160,794->194,627 (panel 993,665->784,594)
+[17506] [DBG] [AA] cancel reason=menu at=deferred-lsb
+[17507] [DBG] [EPD] Wait complete: 8179_gray_cleanup (1 ms)
+[17517] [DBG] [SD] DICT: open for read failed: /.crossdink/epub_3464334372671844247/dictionary.bin
+[17533] [DBG] [ACT] Entering activity: EpubReaderDrawer
+[17540] [DBG] [DREG] Found dictionary: Oxford English/english-Oxford-2005
+[17544] [DBG] [DREG] Found dictionary: en/dict-data
+[17545] [DBG] [DREG] Discovery complete: 2 dictionaries in /.dictionaries
+[17556] [DBG] [SD] DICT: open for read failed: /.crossdink/epub_3464334372671844247/dictionary.bin
+[17576] [DBG] [LIGHT] Flash duck: down, dark in 329 ms
+[17634] [INF] [EPD] 8179 VCOM 22 (TR4, 28 C)
+[17635] [DBG] [EPD] SPI fast: 3 planes 84 ms
+[17641] [DBG] [LIGHT] Flash duck: plan to dark 60 ms, input to dark 172 ms (kind 2)
+[17641] [DBG] [LIGHT] Flash duck: dark at 17641 (DRF+6)
+[18005] [DBG] [LIGHT] Flash duck: up at 0%
+[18044] [DBG] [FrontlightMgr] apply: brightness=0 level=0 totalDuty=0 coolDuty=0 warmDuty=0 lit=0
+[18298] [DBG] [LAT] #9 in=swipe act=EpubReaderDrawer path=- queue=102 render=733 ink=0 total=835
+[18298] [DBG] [EPD] Wait complete: 8179_BW_TARGET_DRF (663 ms)
+[18317] [DBG] [LIGHT] Flash duck: restored at 18317 (end+12), duty 1%
+[18384] [INF] [MEM] Periodic: heap free=103160 total=264972 min=83016 maxAlloc=40948 psram free=6855040 total=7246188 min=6764832 maxAlloc=6815732
+[18438] [INF] [CPU] core0 16% core1 12% over 2057 ms act=EpubReaderDrawer | loopTask(0)16% ActivityManager(1)12% wifi(0)0% WebServer(1)0% tiT(0)0%
+[18438] [DBG] [PERF] sd open=14 miss=2 rd=37KB/27ms wr=0KB/0ms img hit=2 dec=0/0ms
+[18596] [DBG] [FrontlightMgr] apply: brightness=1 level=2 totalDuty=1 coolDuty=0 warmDuty=1 lit=1
+[20378] [DBG] [IN] #10 swipe up 159,794->142,708 (panel 993,668->886,703)
+[20379] [DBG] [ACT] Exiting activity: EpubReaderDrawer
+[20380] [INF] [EPS] reader exit after caches: internal free=104880 max=40948; psram free=6945804 max=6815732 total=7246188
+[20380] [DBG] [ACT] Exiting activity: EpubReader
+[20390] [DBG] [SDW] write - crossdink/epub_3464334372671844247/progress_percent.bin 7 B 0 ms
+[20391] [DBG] [ACT] Entering activity: Home
+[20461] [DBG] [SD] HOME: open for read failed: /.crossdink/epub_3464334372671844247/thumb_151x226.bmp
+[20466] [INF] [MEM] Periodic: heap free=106720 total=264972 min=83016 maxAlloc=63476 psram free=6956216 total=7246188 min=6764832 maxAlloc=6946804
+[20469] [INF] [CPU] core0 8% core1 0% over 2031 ms act=Home | loopTask(0)7% ActivityManager(1)0% wifi(0)0% WebServer(1)0% tiT(0)0%
+[20469] [DBG] [PERF] sd open=5 miss=2 rd=0KB/0ms wr=0KB/0ms img hit=0 dec=0/0ms
+[20472] [DBG] [PM] 4s: act=EpubReaderDrawer sleep=56% cpumax=34% ls=65 rej=0 wake=gpio:23(btn 0,touch 23) timer:42 cause=t:57 g:2 w:6 o:0 loop=132 top=crossdink-activ 17%,epd-refresh 16%,rtos0 15%
+[20511] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[20556] [DBG] [RXS] Reader exit writes flushed in 19 ms
+[20807] [DBG] [SDW] write EBP rossdink/epub_3464334372671844247/thumb_151x226.bmp.tmp 4582 B 24 ms
+[20827] [DBG] [SDW] rename /.crossdink/epub_3464334372671844247/thumb_151x226.bmp.tmp -> /.crossdink/epub_3464334372671844247/thumb_151x226.bmp
+[20828] [DBG] [HOME] cover worker: 1 book(s) in 292ms on core 0, stack left 4964
+[20828] [DBG] [STK] exit HomeCovers: min free 4964
+[21073] [DBG] [EPD] Wait complete: 8179_DRF (190 ms)
+[21130] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[21694] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[21721] [DBG] [LAT] #10 in=swipe act=Home path=- queue=76 render=81 ink=1186 total=1343
+[23397] [INF] [CPU] core0 12% core1 6% over 2927 ms act=Home | ActivityManager(1)6% loopTask(0)6% wifi(0)0% WebServer(1)0% tiT(0)0%
+[23397] [DBG] [PERF] sd open=7 miss=0 rd=54KB/95ms wr=4KB/24ms img hit=0 dec=0/0ms
+[24054] [DBG] [IN] #11 tap 273,340 (panel 425,430)
+[24056] [DBG] [ACT] Exiting activity: Home
+[24056] [DBG] [ACT] Entering activity: FileBrowser
+[24120] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[24684] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[24711] [DBG] [LAT] #11 in=tap act=FileBrowser path=- queue=9 render=59 ink=589 total=657
+[25394] [INF] [MEM] Periodic: heap free=106952 total=264972 min=83016 maxAlloc=63476 psram free=6965752 total=7246188 min=6764832 maxAlloc=6946804
+[25448] [INF] [CPU] core0 7% core1 4% over 2051 ms act=FileBrowser | loopTask(0)7% ActivityManager(1)4% wifi(0)0% WebServer(1)0% tiT(0)0%
+[25449] [DBG] [PERF] sd open=2 miss=0 rd=0KB/0ms wr=0KB/0ms img hit=0 dec=0/0ms
+[25451] [DBG] [PM] 4s: act=Home sleep=46% cpumax=36% ls=59 rej=0 wake=gpio:12(btn 0,touch 12) timer:47 cause=t:51 g:1 w:7 o:0 loop=121 top=epd-refresh 36%,crossdink-activ 17%,rtos1 17%
+[26468] [DBG] [IN] #12 tap 223,539 (panel 674,534)
+[26644] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[27207] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[27234] [DBG] [LAT] #12 in=tap act=FileBrowser path=- queue=74 render=104 ink=588 total=766
+[27401] [INF] [MEM] Periodic: heap free=101700 total=264972 min=83016 maxAlloc=61428 psram free=6965752 total=7246188 min=6764832 maxAlloc=6946804
+[27458] [INF] [CPU] core0 9% core1 6% over 2009 ms act=FileBrowser | loopTask(0)8% ActivityManager(1)6% wifi(0)0% WebServer(1)0% tiT(0)0%
+[27458] [DBG] [PERF] sd open=1 miss=0 rd=0KB/0ms wr=0KB/0ms img hit=0 dec=0/0ms
+[29819] [DBG] [IN] #13 swipe up 304,624->346,286 (panel 780,365->357,277)
+[29912] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[30475] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[30502] [DBG] [LAT] #13 in=swipe act=FileBrowser path=- queue=2 render=93 ink=588 total=683
+[30886] [DBG] [IN] #14 swipe up 309,616->342,292 (panel 770,354->365,286)
+[30993] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[31446] [DBG] [IN] #15 tap 23,69 (panel 86,951)
+[31447] [DBG] [LAT] #14 in=swipe act=FileBrowser superseded by #15
+[31492] [INF] [MEM] Periodic: heap free=106952 total=264972 min=83016 maxAlloc=63476 psram free=6965752 total=7246188 min=6764832 maxAlloc=6946804
+[31508] [INF] [CPU] core0 14% core1 13% over 2013 ms act=FileBrowser | loopTask(0)14% ActivityManager(1)12% wifi(0)0% WebServer(1)0% tiT(0)0%
+[31508] [DBG] [PERF] sd open=1 miss=0 rd=0KB/0ms wr=0KB/0ms img hit=0 dec=0/0ms
+[31554] [DBG] [EPD] Wait complete: 8179_DRF (73 ms)
+[31612] [DBG] [EPD] SPI fast: 2 planes 55 ms
+[32175] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[32202] [DBG] [LAT] #15 in=tap act=FileBrowser path=- queue=8 render=159 ink=588 total=755
+[34254] [INF] [STK] lowest free stack (bytes): IDLE1:632 IDLE0:640 ipc0:1092 arduino_usb_eve:1152 ipc1:1260 Tmr Svc:1856 mdns:2244 sys_evt:2680 | loopTask:7432/12288 render:16036
+[34254] [INF] [CPU] core0 5% core1 3% over 2746 ms act=FileBrowser | loopTask(0)4% ActivityManager(1)3% wifi(0)0% WebServer(1)0% tiT(0)0%
+[34356] [DBG] [IN] #16 tap 189,430 (panel 538,605)
+[34440] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[35003] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[35030] [DBG] [LAT] #16 in=tap act=FileBrowser path=- queue=7 render=78 ink=588 total=673
+[36285] [INF] [CPU] core0 8% core1 5% over 2030 ms act=FileBrowser | loopTask(0)8% ActivityManager(1)5% wifi(0)0% WebServer(1)0% tiT(0)0%
+[36285] [DBG] [PERF] sd open=1 miss=0 rd=0KB/0ms wr=0KB/0ms img hit=0 dec=0/0ms
+[41608] [DBG] [IN] #17 tap 380,247 (panel 309,206)
+[41609] [DBG] [ACT] Exiting activity: FileBrowser
+[41609] [DBG] [ACT] Entering activity: Reader
+[41673] [DBG] [SDW] mkdir /.crossdink/epub_1809123619030230874
+[41981] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/img_0_0.jpeg.part 38851 B 120 ms
+[41991] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/img_0_0.jpeg.part -> /.crossdink/epub_1809123619030230874/img_0_0.jpeg
+[42041] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/book.bin.part 4849 B 16 ms
+[42050] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/book.bin.part -> /.crossdink/epub_1809123619030230874/book.bin
+[42694] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/img_0_0.pxc.part 81320 B 253 ms
+[42703] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/img_0_0.pxc.part -> /.crossdink/epub_1809123619030230874/img_0_0.pxc
+[42874] [DBG] [SDW] write EBP ossdink/epub_1809123619030230874/thumb_296x468.bmp.part 18782 B 77 ms
+[42884] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/thumb_296x468.bmp.part -> /.crossdink/epub_1809123619030230874/thumb_296x468.bmp
+[42901] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/progress.bin.part 20 B 2 ms
+[42910] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/progress.bin.part -> /.crossdink/epub_1809123619030230874/progress.bin
+[42957] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/thumb_226.bmp.part 4562 B 14 ms
+[42967] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/thumb_226.bmp.part -> /.crossdink/epub_1809123619030230874/thumb_226.bmp
+[43851] [DBG] [SDW] write EBP /epub_1809123619030230874/cover_legacy_v2_crop.bmp.part 108870 B 341 ms
+[43867] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/cover_legacy_v2_crop.bmp.part -> /.crossdink/epub_1809123619030230874/cover_legacy_v2_crop.bmp
+[44185] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/cover_src.jpg.part 38851 B 121 ms
+[44198] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/cover_src.jpg.part -> /.crossdink/epub_1809123619030230874/cover_src.jpg
+[44314] [DBG] [SDW] write EBP ossdink/epub_1809123619030230874/thumb_200x390.bmp.part 10982 B 53 ms
+[44329] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/thumb_200x390.bmp.part -> /.crossdink/epub_1809123619030230874/thumb_200x390.bmp
+[44349] [DBG] [SDW] write EBP dink/epub_1809123619030230874/progress_percent.bin.part 7 B 2 ms
+[44363] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/progress_percent.bin.part -> /.crossdink/epub_1809123619030230874/progress_percent.bin
+[44404] [DBG] [SDW] write EBP ossdink/epub_1809123619030230874/thumb_123x180.bmp.part 2942 B 10 ms
+[44419] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/thumb_123x180.bmp.part -> /.crossdink/epub_1809123619030230874/thumb_123x180.bmp
+[44661] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/img_1_0.jpg.part 25432 B 95 ms
+[44675] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/img_1_0.jpg.part -> /.crossdink/epub_1809123619030230874/img_1_0.jpg
+[45349] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/img_1_0.pxc.part 82828 B 259 ms
+[45361] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/img_1_0.pxc.part -> /.crossdink/epub_1809123619030230874/img_1_0.pxc
+[46073] [DBG] [SDW] write EBP ssdink/epub_1809123619030230874/cover_absolute.bmp.part 87070 B 272 ms
+[46092] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/cover_absolute.bmp.part -> /.crossdink/epub_1809123619030230874/cover_absolute.bmp
+[46114] [DBG] [SDW] write EBP /.crossdink/epub_1809123619030230874/stats_v5.bin.part 73 B 2 ms
+[46128] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/stats_v5.bin.part -> /.crossdink/epub_1809123619030230874/stats_v5.bin
+[46150] [DBG] [SDW] write EBP rossdink/epub_1809123619030230874/progress.bin.bak.part 20 B 2 ms
+[46166] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/progress.bin.bak.part -> /.crossdink/epub_1809123619030230874/progress.bin.bak
+[46219] [DBG] [SDW] write EBP ossdink/epub_1809123619030230874/thumb_151x226.bmp.part 4582 B 14 ms
+[46236] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/thumb_151x226.bmp.part -> /.crossdink/epub_1809123619030230874/thumb_151x226.bmp
+[46258] [DBG] [SDW] write EBP sdink/epub_1809123619030230874/reader_settings.bin.part 157 B 2 ms
+[46274] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/reader_settings.bin.part -> /.crossdink/epub_1809123619030230874/reader_settings.bin
+[46275] [INF] [EBP] Copied legacy EPUB cache: /.crosspoint/epub_276356129750541876 -> /.crossdink/epub_1809123619030230874
+[46302] [DBG] [SDW] write - /.crossdink/epub_1809123619030230874/path.txt 133 B
+[46342] [DBG] [ACT] Exiting activity: Reader
+[46343] [DBG] [ACT] Entering activity: EpubReader
+[46343] [INF] [EPS] reader enter: internal free=106056 max=63476; psram free=6970524 max=6946804 total=7246188
+[46414] [DBG] [ERS] Reading stats loaded: totalReadingSeconds=13 totalPagesTurned=1 avg=0 samples=0 cumulativeAvg=13
+[46435] [DBG] [SDW] write - /.crossdink/state.json 931 B
+[46563] [DBG] [SDW] write - /.crossdink/recent.json.tmp 3495 B
+[46587] [DBG] [SDW] rename /.crossdink/recent.json -> /.crossdink/recent.json.bak
+[46608] [DBG] [SDW] rename /.crossdink/recent.json.tmp -> /.crossdink/recent.json
+[46628] [DBG] [SDW] remove /.crossdink/recent.json.bak
+[46629] [DBG] [LOOP] New max loop duration: 5022 ms (activity EpubReader: 5021 ms, rest of loop: 1 ms)
+[46630] [DBG] [ERS] Loading file: CR!KKXJ90EM6S7XX98PBMPRQ0CNY96Q_split_000.html, index: 1 (free=104224, maxAlloc=63476)
+[46638] [DBG] [ERS] Released SD font caches after uncached section build: free=104224->104224 maxAlloc=63476->63476
+[46638] [DBG] [ERS] Cache not found, building... (free=104224, maxAlloc=63476)
+[46641] [INF] [MEM] Periodic: heap free=103892 total=264972 min=83016 maxAlloc=63476 psram free=6969308 total=7246188 min=6764832 maxAlloc=6946804
+[46644] [INF] [CPU] core0 55% core1 0% over 5301 ms act=EpubReader | loopTask(0)54% wifi(0)0% WebServer(1)0% ActivityManager(1)0% tiT(0)0%
+[46644] [DBG] [PERF] sd open=33 miss=2 rd=527KB/2418ms wr=498KB/1662ms img hit=0 dec=0/0ms
+[46647] [DBG] [PM] 21s: act=FileBrowser sleep=51% cpumax=41% ls=225 rej=1 wake=gpio:75(btn 0,touch 75) timer:150 cause=t:196 g:4 w:26 o:0 rjc=0x0 loop=310 top=crossdink-activ 33%,rtos0 21%,sdmmc 20%
+[46659] [DBG] [SCT] Start incremental section build: spine=1 mode=0 preview=0 viewport=464x761 image=0 focus=0 guide=0 free=103548 maxAlloc=63476
+[46715] [DBG] [SDW] mkdir /.crossdink/epub_1809123619030230874/sections
+[46755] [DBG] [SDW] mkdir /.crossdink/epub_1809123619030230874/html
+[46781] [DBG] [ZIP] Stream CR!KKXJ90EM6S7XX98PBMPRQ0CNY96Q_split_000.html: ok=1 lookup=10038us read/inflate=1219us write=3946us bytes=726
+[46784] [DBG] [SDW] write SCT /.crossdink/epub_1809123619030230874/html/.tmp_1.html 726 B 3 ms
+[46797] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/html/.tmp_1.html -> /.crossdink/epub_1809123619030230874/html/1.html
+[46835] [DBG] [EHP] Section advance prewarm: codepoints=9 time=17 ms free=96268 maxAlloc=55284
+[46847] [DBG] [EHP] Released SD font caches before image extraction: free=95048->95048 maxAlloc=53236->53236 src=images/00001.jpg
+[46865] [DBG] [INF] Window: bytes=32768 pool=psram psramReserve=131072
+[46868] [DBG] [ZIP] Stream images/00001.jpg: ok=1 lookup=17543us read/inflate=2400us write=50us bytes=1024
+[46872] [DBG] [EHP] Time to parse and build pages: 53 ms (free=94840, maxAlloc=53236)
+[46877] [DBG] [SDW] write SCT .crossdink/epub_1809123619030230874/sections/1.bin.part 216 B 3 ms
+[46896] [DBG] [SDW] rename /.crossdink/epub_1809123619030230874/sections/1.bin.part -> /.crossdink/epub_1809123619030230874/sections/1.bin
+[46896] [DBG] [SCT] Section built: spine=1 pages=1 bytes=189 wall_ms=242
+[46901] [DBG] [ERS] primary section cache built: spine=1 font=-1949777969 mode=0 embedded=0 focus=0 guide=0 pages=1 free=103372 maxAlloc=55284 building=0
+[46902] [DBG] [ERS] Released SD font caches after section cache build: free=103372->103964 maxAlloc=55284->63476
+[46902] [DBG] [ERS] Cache build complete: pages=1 font=-1949777969 mode=0 free=103964 maxAlloc=63476
+[46907] [DBG] [ERS] Resolved visible text offset 0 to page 0
+[46914] [DBG] [ERDM] Skipping touch reader preview outside the 8 KiB/256-run snapshot budget
+[46926] [DBG] [IMG] Local image cache hit: /.crossdink/epub_1809123619030230874/img_1_0.jpg
+[46978] [INF] [EPS] Retained PXC in PSRAM: bytes=82824 total=82824 entries=2 dimensions=464x714
+[46978] [INF] [EPS] pxc retained: internal free=103604 max=63476; psram free=6864852 max=6815732 total=7246188
+[47129] [DBG] [EPD] 8179: gray base skipped, full swing sets every pixel
+[47364] [DBG] [EPD] Wait complete: 8179_gray_lsb (1 ms)
+[47366] [DBG] [LIGHT] Flash duck: down, dark in 72 ms
+[47402] [DBG] [EPD] Wait complete: 8179_gray_msb (1 ms)
+[47443] [DBG] [EPD] Wait complete: 8179_gray_ready (1 ms)
+[47444] [DBG] [EPD] Wait complete: 8179_direct_setup_ready (1 ms)
+[47446] [DBG] [EPD] Wait complete: 8179_direct_ready (1 ms)
+[47446] [DBG] [EPD] SPI direct_gray: 3 planes 84 ms
+[47451] [DBG] [LIGHT] Flash duck: plan to dark 654 ms, input to dark 6409 ms (kind 0)
+[47465] [DBG] [LIGHT] Flash duck: dark at 47465 (DRF-552)
+[47816] [DBG] [FrontlightMgr] apply: brightness=0 level=0 totalDuty=0 coolDuty=0 warmDuty=0 lit=0
+[48348] [DBG] [LIGHT] Flash duck: up at 0%
+[48636] [DBG] [LAT] #17 in=tap act=EpubReader path=draw queue=5021 render=2007 ink=0 total=7028
+[48637] [DBG] [EPD] Wait complete: 8179_DIRECT_GRAY_DRF (1191 ms)
+[48638] [DBG] [EPD] Wait complete: 8179_gray_cleanup (1 ms)
+[48643] [INF] [MEM] Periodic: heap free=104028 total=264972 min=83016 maxAlloc=63476 psram free=6864852 total=7246188 min=6764832 maxAlloc=6815732
+[48661] [INF] [CPU] core0 30% core1 32% over 2016 ms act=EpubReader | ActivityManager(1)32% loopTask(0)30% wifi(0)0% WebServer(1)0% tiT(0)0%
+[48661] [DBG] [PERF] sd open=16 miss=0 rd=90KB/72ms wr=0KB/7ms img hit=3 dec=0/0ms
+[48662] [DBG] [LIGHT] Flash duck: restored at 48662 (end+17), duty 1%
+[49650] [DBG] [FrontlightMgr] apply: brightness=1 level=2 totalDuty=1 coolDuty=0 warmDuty=1 lit=1
+[50132] [DBG] [IN] #18 swipe up 108,773->130,582 (panel 967,774->728,728)
+[50145] [DBG] [SD] DICT: open for read failed: /.crossdink/epub_1809123619030230874/dictionary.bin
+[50161] [DBG] [ACT] Entering activity: EpubReaderDrawer
+[50168] [DBG] [DREG] Found dictionary: Oxford English/english-Oxford-2005
+[50172] [DBG] [DREG] Found dictionary: en/dict-data
+[50173] [DBG] [DREG] Discovery complete: 2 dictionaries in /.dictionaries
+[50185] [DBG] [SD] DICT: open for read failed: /.crossdink/epub_1809123619030230874/dictionary.bin
+[50286] [DBG] [EPD] Wait complete: 8179_direct_exit_POF (82 ms)
+[50402] [DBG] [EPD] 8179: selective exit paint (gray pixels + changes only)
+[50558] [DBG] [EPD] Wait complete: 8179_PON (128 ms)
+[50558] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[50675] [INF] [CPU] core0 9% core1 4% over 2014 ms act=EpubReaderDrawer | loopTask(0)9% ActivityManager(1)4% wifi(0)0% WebServer(1)0% tiT(0)0%
+[50676] [DBG] [PERF] sd open=10 miss=2 rd=0KB/2ms wr=0KB/0ms img hit=0 dec=0/0ms
+[50678] [DBG] [PM] 4s: act=EpubReader sleep=28% cpumax=51% ls=20 rej=0 wake=gpio:12(btn 0,touch 12) timer:8 cause=t:16 g:1 w:3 o:0 loop=192 top=epd-refresh 36%,crossdink-activ 31%,rtos1 27%
+[51221] [DBG] [LAT] #18 in=swipe act=EpubReaderDrawer path=- queue=62 render=1027 ink=0 total=1089
+[51221] [DBG] [EPD] Wait complete: 8179_BW_TARGET_DRF (663 ms)
+[51436] [DBG] [IN] #19 swipe up 146,794->175,602 (panel 993,695->753,634)
+[51437] [DBG] [ACT] Exiting activity: EpubReaderDrawer
+[51438] [INF] [EPS] reader exit after caches: internal free=104676 max=63476; psram free=6947508 max=6815732 total=7246188
+[51438] [DBG] [ACT] Exiting activity: EpubReader
+[51443] [DBG] [ACT] Entering activity: Home
+[51602] [DBG] [EPD] SPI fast: 2 planes 55 ms
+[51650] [DBG] [RXS] Reader exit writes flushed in 20 ms
+[52165] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[52192] [DBG] [LAT] #19 in=swipe act=Home path=- queue=73 render=120 ink=563 total=756
+[52672] [INF] [MEM] Periodic: heap free=106164 total=264972 min=83016 maxAlloc=63476 psram free=6955000 total=7246188 min=6764832 maxAlloc=6946804
+[52728] [INF] [CPU] core0 15% core1 8% over 2052 ms act=Home | loopTask(0)14% ActivityManager(1)7% wifi(0)0% WebServer(1)0% tiT(0)0%
+[52728] [DBG] [PERF] sd open=7 miss=1 rd=4KB/6ms wr=0KB/0ms img hit=0 dec=0/0ms
+[52730] [DBG] [PM] 2s: act=EpubReaderDrawer sleep=26% cpumax=42% ls=14 rej=0 wake=gpio:13(btn 0,touch 13) timer:1 cause=t:13 g:0 w:1 o:0 loop=91 top=epd-refresh 54%,rtos0 21%,crossdink-activ 20%
+[68505] [INF] [WEB] idle 60s: wakes traffic=2 spurious=0 timeout=241 holds=2 log long-poll waits=0 woken=0
+[75934] [INF] [STK] lowest free stack (bytes): IDLE1:632 IDLE0:640 ipc0:1092 arduino_usb_eve:1152 ipc1:1260 Tmr Svc:1856 mdns:2244 sys_evt:2680 | loopTask:7368/12288 render:16036
+[76015] [DBG] [IN] #20 swipe left 286,201->102,175 (panel 251,402->219,787)
+[76122] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[76685] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[76713] [DBG] [LAT] #20 in=swipe act=Home path=- queue=22 render=87 ink=589 total=698
+[76769] [DBG] [IN] #21 swipe left 220,220->123,215 (panel 275,540->269,743)
+[76889] [DBG] [EPD] SPI fast: 2 planes 54 ms
+[77453] [DBG] [EPD] Wait complete: 8179_DRF (1 ms)
+[77480] [DBG] [LAT] #21 in=swipe act=Home path=- queue=27 render=96 ink=588 total=711
+[77960] [INF] [CPU] core0 11% core1 11% over 2025 ms act=Home | ActivityManager(1)11% loopTask(0)10% wifi(0)0% WebServer(1)0% tiT(0)0%
+[77960] [DBG] [PERF] sd open=6 miss=0 rd=9KB/10ms wr=0KB/0ms img hit=0 dec=0/0ms
+[83741] [DBG] [PM] 31s: act=Home sleep=84% cpumax=10% ls=414 rej=2 wake=gpio:15(btn 0,touch 15) timer:399 cause=t:346 g:1 w:69 o:0 rjc=0x0 loop=138 top=rtos1 6%,wifi 6%,epd-refresh 4%

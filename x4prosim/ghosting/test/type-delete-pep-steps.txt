@@ -1,0 +1,20 @@
+wait:25
+hmp:qom-set /machine/gt911 tap 240,591
+wait:6
+hmp:qom-set /machine/gt911 tap 240,369
+wait:6
+hmp:qom-set /machine/gt911 tap 240,137
+wait:8
+hmp:qom-set /machine/gt911 tap 447,573
+wait:3
+hmp:qom-set /machine/gt911 tap 125,573
+wait:3
+hmp:qom-set /machine/gt911 tap 447,573
+wait:3
+hmp:qom-set /machine/gt911 tap 433,693
+wait:3
+hmp:qom-set /machine/gt911 tap 433,693
+wait:3
+hmp:qom-set /machine/gt911 tap 433,693
+wait:4
+shot:OUT.png
