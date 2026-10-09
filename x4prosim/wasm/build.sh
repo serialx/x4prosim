@@ -71,5 +71,5 @@ fi
 ninja -j"$JOBS" qemu-system-riscv32.js qemu-system-xtensa.js
 
 if [ "$WEB" = 1 ]; then
-    "$ROOT/x4prosim/wasm/package-web.sh"
+    WASM_BUILD_DIR="$BUILD" "$ROOT/x4prosim/wasm/package-web.sh"
 fi

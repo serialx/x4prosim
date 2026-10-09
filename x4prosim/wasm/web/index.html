@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>x4prosim · Browser emulator</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="coi-serviceworker.js"></script>
+</head>
+<body>
+  <header><h1>x4prosim</h1><p>Xteink X3 and X4 Pro · WebAssembly emulator</p></header>
+  <section class="loader" aria-label="Images">
+    <label>Flash image · 16 MiB <input id="flash" type="file" accept=".bin"></label>
+    <label>SD image · optional <input id="sd" type="file" accept=".img"></label>
+    <button id="start">Start</button>
+    <p class="hint">Without an SD image, a blank 64 MiB FAT32 card is used. Download your SD image to keep changes.</p>
+  </section>
+  <p id="status" role="status">Choose a flash image to begin.</p>
+  <main>
+    <section class="device" aria-label="Device display and buttons">
+      <div id="screen"><p>The device screen will appear here.</p></div>
+      <div id="keys" aria-label="Device keys"></div>
+      <p class="hint">Keyboard: arrows, Enter, Backspace / Esc, P. X4 Pro also supports touch on the screen.</p>
+      <div class="actions">
+        <button id="reset" disabled>Reset</button>
+        <button id="stop" disabled>Stop</button>
+        <button id="download" disabled>Download SD image</button>
+      </div>
+    </section>
+    <section class="console"><h2>USB-CDC console</h2><pre id="console" tabindex="0" aria-label="Firmware console"></pre></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
