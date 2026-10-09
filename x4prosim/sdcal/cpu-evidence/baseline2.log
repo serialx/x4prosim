@@ -1,0 +1,59 @@
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x1010
+load:0x403cbf10,len:0x9f4
+load:0x403ce710,len:0x2ea4
+entry 0x403cbf10
+[385] [INF] [HW] Using cached device type: X3
+[385] [XTDET] NVS hw_calib/screenType: not set
+[497] [XTDET] X3 stock probe VER=FF FF FF BUSY-timeout=0 -> UC8253
+[508] [INF] [GYR] SDK IMU initialized
+[508] [INF] [CLK] SDK RTC found[508] [INF] [MAIN] Hardware detect: X3
+[521] [SD] SD card detected
+[530] [DBG] [CPS] Settings loaded from file
+[532] [DBG] [UI] Using Lyra theme
+[   534][E][Preferences.cpp:47] begin(): nvs_open failed: NOT_FOUND
+[534] [DBG] [MAIN] Starting CrossPoint version 1.6.5-dev-detached-5f545639
+[708] [DBG] [MAIN] Display initialized
+[709] [DBG] [SDREG] Found family: Pretendard (4 files) in /.fonts
+[711] [DBG] [SDREG] Found family: MaruBuriSemiBold (1 files) in /.fonts
+[712] [DBG] [SDREG] Fonts directory not found: /fonts
+[712] [DBG] [SDREG] Discovery complete: 2 families
+[717] [DBG] [SDCF] Style 1: sharing style 0's 72-interval table (432 B not allocated)
+[717] [DBG] [SDCF] Loaded: /.fonts/Pretendard/Pretendard_16.cpfont (v4, 2 styles)
+[717] [DBG] [SDCF]   style[0]: 72 intervals, 13050 glyphs, advY=40, asc=32, desc=-9, kernL=1121, kernR=1110, ligs=0
+[717] [DBG] [SDCF]   style[1]: 72 intervals, 13050 glyphs, advY=40, asc=32, desc=-9, kernL=1121, kernR=1137, ligs=0
+[717] [DBG] [SDMGR] Loaded /.fonts/Pretendard/Pretendard_16.cpfont size=16 id=-268348841 styles=2
+[722] [DBG] [SDCF] Style 1: sharing style 0's 72-interval table (432 B not allocated)
+[722] [DBG] [SDCF] Loaded: /.fonts/Pretendard/Pretendard_8.cpfont (v4, 2 styles)
+[722] [DBG] [SDCF]   style[0]: 72 intervals, 13050 glyphs, advY=20, asc=16, desc=-5, kernL=1121, kernR=1108, ligs=0
+[722] [DBG] [SDCF]   style[1]: 72 intervals, 13050 glyphs, advY=20, asc=16, desc=-5, kernL=1121, kernR=1137, ligs=0
+[722] [DBG] [SDMGR] Loaded /.fonts/Pretendard/Pretendard_8.cpfont size=8 id=743695685 styles=2
+[726] [DBG] [SDCF] Style 1: sharing style 0's 72-interval table (432 B not allocated)
+[726] [DBG] [SDCF] Loaded: /.fonts/Pretendard/Pretendard_10.cpfont (v4, 2 styles)
+[726] [DBG] [SDCF]   style[0]: 72 intervals, 13050 glyphs, advY=25, asc=20, desc=-6, kernL=1121, kernR=1108, ligs=0
+[726] [DBG] [SDCF]   style[1]: 72 intervals, 13050 glyphs, advY=25, asc=20, desc=-6, kernL=1121, kernR=1137, ligs=0
+[727] [DBG] [SDMGR] Loaded /.fonts/Pretendard/Pretendard_10.cpfont size=10 id=-1384306718 styles=2
+[732] [DBG] [SDCF] Style 1: sharing style 0's 72-interval table (432 B not allocated)
+[732] [DBG] [SDCF] Loaded: /.fonts/Pretendard/Pretendard_12.cpfont (v4, 2 styles)
+[732] [DBG] [SDCF]   style[0]: 72 intervals, 13050 glyphs, advY=30, asc=24, desc=-7, kernL=1121, kernR=1110, ligs=0
+[732] [DBG] [SDCF]   style[1]: 72 intervals, 13050 glyphs, advY=30, asc=24, desc=-7, kernL=1121, kernR=1137, ligs=0
+[732] [DBG] [SDMGR] Loaded /.fonts/Pretendard/Pretendard_12.cpfont size=12 id=499830120 styles=2
+[732] [DBG] [SDFS] Loaded SD card font family: Pretendard
+[732] [DBG] [SDFS] SD font system ready (2 families discovered)
+[732] [DBG] [MAIN] Fonts setup
+[732] [DBG] [ACT] Entering activity: Boot
+[733] [DBG] [GFX] Time = 1 ms from clearScreen to displayBuffer
+[953]   Wait complete:  X3_PON (127 ms)
+[1888]   Wait complete:  X3_DRF (935 ms)
+[2564]   Wait complete:  X3_DRF (383 ms)
+[2616] [DBG] [ACT] Exiting activity: Boot
+[2616] [DBG] [ACT] Entering activity: Home
+[2620] [DBG] [GFX] Time = 3 ms from clearScreen to displayBuffer
+[3051]   Wait complete:  X3_DRF (383 ms)
+[3108] [DBG] [GFX] Time = 3 ms from clearScreen to displayBuffer
+[3538]   Wait complete:  X3_DRF (383 ms)
+[5627] [DBG] [PWR] Going to low-power mode

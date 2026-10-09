@@ -1,0 +1,270 @@
+name: 'build'
+
+on: [push, pull_request]
+
+# x4prosim: a newer push to the same branch or PR cancels the older run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  Vars:
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION: ${{ steps.Vars.outputs.VERSION }}
+      PROJECT_NAME: ${{ steps.Vars.outputs.PROJECT_NAME }}
+      REPOSITORY_URL: ${{ steps.Vars.outputs.REPOSITORY_URL }}
+    steps:
+      - id: Vars
+        run: |
+          echo "ref_type: ${{ github.ref_type }}"
+          echo "ref: ${{ github.ref }}"
+          echo "sha: ${{ github.sha }}"
+          echo ""
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION=${{ github.ref }}
+            VERSION=${VERSION#"refs/tags/"}
+            VERSION=${VERSION//"-"/"_"}   # replace dashes with underscores in the version
+          else
+            VERSION=${{ github.sha }}
+            VERSION=g${VERSION:0:8}
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo $VERSION
+
+          OWNER=${{ github.repository_owner }}
+          FULLNAME=${{ github.repository }}
+          PROJECT_NAME=${FULLNAME#"$OWNER/"}
+          echo "PROJECT_NAME=$PROJECT_NAME" >> "$GITHUB_OUTPUT"
+          echo $PROJECT_NAME
+
+          REPOSITORY_URL=${{ github.server_url }}/${{ github.repository }}
+          echo "REPOSITORY_URL=$REPOSITORY_URL" >> "$GITHUB_OUTPUT"
+          echo $REPOSITORY_URL
+
+  Build:
+    needs: [ Vars ]
+    env:
+      # A simple way to spread several environments for Windows. But to be more precise, we need to somehow add different envs to matrix.include
+
+      MSYSTEM: UCRT64  # Ref: https://www.msys2.org/docs/environments/
+      CHERE_INVOKING: 'yes'
+      MSYS: 'winsymlinks:native'
+    strategy:
+      fail-fast: false
+      matrix:
+        # Naming MinGW platforms: https://sourceforge.net/p/mingw-w64/wiki2/TypeTriplets/
+        platform:
+          - x86_64-linux-gnu
+          - aarch64-linux-gnu
+          - x86_64-w64-mingw32
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+        target: [xtensa-softmmu, riscv32-softmmu]
+
+        include:
+          - platform: x86_64-linux-gnu
+            runs_on: ubuntu-22.04
+            # x4prosim: Debian 11's security archive is gone; Debian 12 (glibc 2.36)
+            container: debian:12
+            shell: bash -e {0}
+            run_prerequisites: "./.github/workflows/scripts/prerequisites-native.sh"
+            run_configure: "./.github/workflows/scripts/configure-native.sh"
+
+          - platform: aarch64-linux-gnu
+            runs_on: ubuntu-22.04
+            # x4prosim: Debian 11's security archive is gone; Debian 12 (glibc 2.36)
+            container: debian:12
+            shell: bash -e {0}
+            run_prerequisites: "./.github/workflows/scripts/prerequisites-cross-linux-arm64.sh"
+            run_configure: "./.github/workflows/scripts/configure-cross-linux-arm64.sh"
+
+          - platform: x86_64-w64-mingw32
+            runs_on: windows-2022
+            shell: msys2 {0}
+            run_configure: "./.github/workflows/scripts/configure-win.sh"
+
+          - platform: x86_64-apple-darwin
+            runs_on: macos-15-intel
+            shell: bash -e {0}
+            run_prerequisites: "./.github/workflows/scripts/prerequisites-macos.sh"
+            run_configure: "./.github/workflows/scripts/configure-macos.sh"
+
+          - platform: aarch64-apple-darwin
+            runs_on: macos-14
+            shell: bash -e {0}
+            run_prerequisites: "./.github/workflows/scripts/prerequisites-macos.sh"
+            run_configure: "./.github/workflows/scripts/configure-macos.sh"
+
+    runs-on: ${{ matrix.runs_on }}
+    container:
+        image: ${{ matrix.container }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
+        if : ${{ matrix.platform != 'x86_64-w64-mingw32' }}
+        run: |
+          ${{ matrix.run_prerequisites }}
+
+      - name: Install MSYS2 prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
+        if : ${{ matrix.platform == 'x86_64-w64-mingw32' }}
+        uses: msys2/setup-msys2@v2
+        with:
+          cache: true
+          msystem: UCRT64
+          install: >-
+            diffutils
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-libgcrypt
+            mingw-w64-ucrt-x86_64-libiconv
+            mingw-w64-ucrt-x86_64-libpng
+            mingw-w64-ucrt-x86_64-libslirp
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pixman
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-SDL2
+
+      - name: Configure (${{ matrix.target }} @ ${{ matrix.platform }})
+        env:
+          VERSION: ${{ needs.Vars.outputs.VERSION }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          ${{ matrix.run_configure }}
+
+      - name: Build (${{ matrix.target }} @ ${{ matrix.platform }})
+        run: |
+          ninja -C build install
+
+      - name: Smoke test (${{ matrix.target }} @ ${{ matrix.platform }})
+        if : ${{ matrix.platform == 'x86_64-linux-gnu' }}
+        run: |
+          # x4prosim: the board machines must come up (no firmware: blank flash spins in the ROM)
+          head -c 16777216 /dev/zero > blank.bin
+          if [ "${{ matrix.target }}" = xtensa-softmmu ]; then bin=qemu-system-xtensa; m=x4pro; else bin=qemu-system-riscv32; m=x3; fi
+          set +e
+          timeout 10 install/qemu/bin/$bin -machine $m -display none -serial null -monitor none \
+            -drive file=blank.bin,if=mtd,format=raw -nic user,model=esp32_wifi
+          rc=$?
+          [ $rc = 124 ] || { echo "machine $m exited with $rc"; exit 1; }
+
+      - name: Bundle Windows DLLs (${{ matrix.target }} @ ${{ matrix.platform }})
+        if : ${{ matrix.platform == 'x86_64-w64-mingw32' }}
+        run: |
+          ./.github/workflows/scripts/bundle-win-dlls.sh install/qemu/bin
+
+      - name: Package (${{ matrix.target }} @ ${{ matrix.platform }})
+        env:
+          VERSION: ${{ needs.Vars.outputs.VERSION }}
+          PROJECT_NAME: ${{ needs.Vars.outputs.PROJECT_NAME }}
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          find $PWD/install/qemu/share/qemu/ -maxdepth 1 -mindepth 1 -not -name 'esp*.bin' -exec rm -rfv {} \;
+          cp -R x4prosim README.md X4PROSIM.md install/qemu/   # x4prosim: run.sh/drive.py find bin/ next to them
+          export DIST_DIR=${PWD}/dist
+          mkdir -p ${DIST_DIR}
+          cd $PWD/install
+          ARCHIVE_NAME=${PROJECT_NAME}-${TARGET}-${VERSION}-${PLATFORM}.tar.xz
+          tar -cJvf ${DIST_DIR}/${ARCHIVE_NAME} qemu > ${DIST_DIR}/dist-filelist-${TARGET}-${PLATFORM}.txt 2>&1
+          echo "dist/dist-qemu-${TARGET}-${PLATFORM}/${ARCHIVE_NAME}" > ${DIST_DIR}/file_${PLATFORM}_${TARGET}
+
+      - name: Save build/build.ninja for failed builds
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-ninja-${{ matrix.target }}-${{ matrix.platform }}
+          path: build/build.ninja
+
+      - name: Dist filelist (dbg) (${{ matrix.target }} @ ${{ matrix.platform }})
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-filelist-${{ matrix.target }}-${{ matrix.platform }}
+          path: |
+            dist/dist-filelist-*
+
+      - name: Dist artifacts (${{ matrix.target }} @ ${{ matrix.platform }})
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-qemu-${{ matrix.target }}-${{ matrix.platform }}
+          path: |
+            dist/
+
+  Upload:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [ Vars, Build ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps :
+      - name: Create a source archive
+        id: create-source
+        env:
+          VERSION: ${{ needs.Vars.outputs.VERSION }}
+          PROJECT_NAME: ${{ needs.Vars.outputs.PROJECT_NAME }}
+          REPOSITORY_URL: ${{ needs.Vars.outputs.REPOSITORY_URL }}
+        run: |
+          export RELEASE_CHECKSUM_FILE="${PROJECT_NAME}-${VERSION}-checksum.sha256"
+          echo "RELEASE_CHECKSUM_FILE=$RELEASE_CHECKSUM_FILE" >> "$GITHUB_OUTPUT"
+          RELEASE_SRC_NAME="${PROJECT_NAME}-${VERSION}-src"
+          export RELEASE_SRC_FILE="${PROJECT_NAME}-${VERSION}-src.tar.xz"
+          echo "RELEASE_SRC_FILE=$RELEASE_SRC_FILE" >> "$GITHUB_OUTPUT"
+
+          rm -rf -- "${RELEASE_SRC_NAME}" "${RELEASE_SRC_FILE}"
+          git clone --quiet --depth 1 --branch "$GITHUB_REF_NAME" --recurse-submodules --shallow-submodules "${REPOSITORY_URL}" "${RELEASE_SRC_NAME}"
+          find "${RELEASE_SRC_NAME}" -name ".git" -type d -exec rm -rf -- "{}" +
+          find "${RELEASE_SRC_NAME}" -name .git\* -exec rm -rf -- {} +
+          tar -cJvf "${RELEASE_SRC_FILE}" "${RELEASE_SRC_NAME}" > src-filelist.txt 2>&1
+          rm -rf -- "${RELEASE_SRC_NAME}"
+          ls -l
+
+      - name: Source filelist (dbg)
+        uses: actions/upload-artifact@v7
+        with:
+          name: src-filelist
+          path: |
+            src-filelist.txt
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dist-qemu-*
+          path: dist
+
+      - name: Create a checksum file
+        env:
+          RELEASE_CHECKSUM_FILE: ${{ steps.create-source.outputs.RELEASE_CHECKSUM_FILE }}
+          RELEASE_SRC_FILE: ${{ steps.create-source.outputs.RELEASE_SRC_FILE }}
+        run: |
+          ls -l
+          DIST_FILE_LIST=$(find . -name file_\* -exec cat {} \+)
+          DIST_FILE_LIST="${DIST_FILE_LIST} ${RELEASE_SRC_FILE}"
+          RELEASE_CHECKSUM_FILE=$(realpath "${RELEASE_CHECKSUM_FILE}")
+          for n in $DIST_FILE_LIST; do
+            # Release archives might be in subdirectories, but we need just the file names in the checksum file
+            n_dir=$(dirname "${n}")
+            n_file=$(basename "${n}")
+            pushd "${n_dir}" > /dev/null
+            sz=$(stat -c%s "${n_file}")
+            printf "# %s: %s bytes\n" "${n_file}" "${sz}" >> "${RELEASE_CHECKSUM_FILE}"
+            sha256sum -b "${n_file}" >> "${RELEASE_CHECKSUM_FILE}"
+            popd > /dev/null
+          done
+          DIST_FILE_LIST="${DIST_FILE_LIST} ${RELEASE_CHECKSUM_FILE}"
+          # remove new lines from file list
+          DIST_FILE_LIST="${DIST_FILE_LIST//$'\n'/ }"
+          cat "${RELEASE_CHECKSUM_FILE}"
+          rm -rf -- upload && mkdir -p upload && mv -v ${DIST_FILE_LIST} upload/
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: upload/*
