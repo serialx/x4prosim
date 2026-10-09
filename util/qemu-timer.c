@@ -145,6 +145,16 @@ void qemu_clock_notify(QEMUClockType type)
     QEMUTimerList *timer_list;
     QEMUClock *clock = qemu_clock_ptr(type);
     QLIST_FOREACH(timer_list, &clock->timerlists, list) {
+        /*
+         * Empty auxiliary lists have no deadline to reconsider.  Inserting
+         * their first timer rearms the list and sends its own notification.
+         * Keep the main list notification: icount also uses it to kick CPUs
+         * at replay checkpoints, even when there is no pending timer.
+         */
+        if (timer_list != main_loop_tlg.tl[type] &&
+            !timerlist_has_timers(timer_list)) {
+            continue;
+        }
         timerlist_notify(timer_list);
     }
 }
