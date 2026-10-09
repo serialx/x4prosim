@@ -4,6 +4,10 @@
  * Required for X3: INPUT_SD (local source card, to compare the download).
  * Optional: CDP_PORT, CHROME_PID, EVIDENCE_DIR, TIMEOUT (seconds),
  * WEB_MACHINE=x4pro, EXPECT_SERVICE_WORKER=1, PICKER_FLASH/PICKER_SD.
+ * CPU_PROFILE=1 captures worker profiles split at Home; BENCH_ONLY=1 stops
+ * after settled; REFERENCE_PPM checks an exact panel screendump.
+ * REFERENCE_LOG also checks the first eight wait lines with sleep=off.
+ * Add sleep=off to the page URL for deterministic timing measurements.
  * No npm packages are required. */
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -23,16 +27,49 @@ const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise(resolve => ws.addEventListener('open', resolve, {once: true}));
 let sequence = 0;
 const calls = new Map(), errors = [];
+const profiling = process.env.CPU_PROFILE === '1';
+const workers = new Map();
+let profilePhase = 'home';
+let profileQueue = Promise.resolve();
+async function endPhase(next) {
+    const phase = profilePhase;
+    profilePhase = next;
+    for (const [session, target] of workers) {
+        const {profile} = await call('Profiler.stop', {}, session);
+        fs.writeFileSync(path.join(evidence, `${phase}-${target.targetId}.cpuprofile`), JSON.stringify(profile));
+        if (next) await call('Profiler.start', {}, session);
+    }
+}
+
 ws.addEventListener('message', event => {
     const message = JSON.parse(event.data);
     if (message.id) {
         const callback = calls.get(message.id); calls.delete(message.id);
         if (message.error) callback.reject(message.error); else callback.resolve(message.result);
     } else if (message.method === 'Runtime.exceptionThrown') errors.push(message.params);
+    else if (message.method === 'Target.attachedToTarget') {
+        const {sessionId, targetInfo} = message.params;
+        profileQueue = profileQueue.then(async () => {
+            await call('Target.setAutoAttach', {autoAttach: true, waitForDebuggerOnStart: true, flatten: true}, sessionId);
+            if (targetInfo.type === 'worker') {
+                workers.set(sessionId, targetInfo);
+                await call('Profiler.enable', {}, sessionId);
+                await call('Profiler.setSamplingInterval', {interval: 1000}, sessionId);
+                await call('Profiler.start', {}, sessionId);
+            }
+            await call('Runtime.runIfWaitingForDebugger', {}, sessionId);
+        }).catch(error => errors.push(String(error)));
+    } else if (profiling && message.method === 'Runtime.consoleAPICalled') {
+        const mark = message.params.args?.[0]?.value;
+        if (mark === 'smoke:home' || mark === 'smoke:settled') {
+            profileQueue = profileQueue.then(() => endPhase(mark === 'smoke:home' ? 'settled' : null))
+                .catch(error => errors.push(String(error)));
+        }
+    }
 });
-const call = (method, params = {}) => new Promise((resolve, reject) => {
+const call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++sequence; calls.set(id, {resolve, reject});
-    ws.send(JSON.stringify({id, method, params}));
+    ws.send(JSON.stringify({id, method, params, sessionId}));
 });
 async function evaluate(expression) {
     const result = await call('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true});
@@ -76,8 +113,9 @@ const sampler = setInterval(() => {
     peakRSS = Math.max(peakRSS, owned.reduce((sum, row) => sum + row[2], 0));
     peakCPU = Math.max(peakCPU, owned.reduce((sum, row) => sum + row[3], 0));
 }, 1000);
-try {
+smoke: try {
     await call('Runtime.enable'); await call('Page.enable');
+    if (profiling) await call('Target.setAutoAttach', {autoAttach: true, waitForDebuggerOnStart: true, flatten: true});
     const downloads = path.resolve(evidence, 'web-downloads');
     fs.mkdirSync(downloads, {recursive: true});
     fs.rmSync(path.join(downloads, 'sd.img'), {force: true});
@@ -86,10 +124,18 @@ try {
     const start = Date.now();
     await call('Page.addScriptToEvaluateOnNewDocument', {source: String.raw`
         window.addEventListener('message', ({origin, data}) => {
-            if (origin === location.origin && data.type === 'log' &&
-                /Wait complete:\s+(?:8279|X3)_DRF/.test(data.line)) {
+            if (origin !== location.origin || data.type !== 'log') return;
+            window.smokeLogLines = (window.smokeLogLines || 0) + 1;
+            if (/Wait complete:\s+(?:8279|X3)_DRF/.test(data.line)) {
                 window.smokeRefreshes = (window.smokeRefreshes || 0) + 1;
-                if (window.smokeRefreshes === 3) window.smokeHomeEpoch = Date.now();
+                if (window.smokeRefreshes === 3) {
+                    window.smokeHomeEpoch = Date.now();
+                    console.debug('smoke:home');
+                }
+            }
+            if (window.smokeHomeEpoch && !window.smokeSettledEpoch && data.line.includes('[MEM]')) {
+                window.smokeSettledEpoch = Date.now();
+                console.debug('smoke:settled');
             }
         });
     `});
@@ -116,7 +162,8 @@ try {
     }
     const runtimeArgs = await waitFor('document.querySelector("iframe").contentWindow.Module?.arguments');
     const shift = process.env.WEB_MACHINE === 'x4pro' ? 2 : 0;
-    const icount = `shift=${shift},sleep=${measurements.turbo ? 'off' : 'on'}`;
+    const sleepOff = measurements.turbo || new URL(process.argv[2]).searchParams.get('sleep') === 'off';
+    const icount = `shift=${shift},sleep=${sleepOff ? 'off' : 'on'}`;
     if (!runtimeArgs.includes(icount) ||
         runtimeArgs.includes('driver=ssi.esp32s3.gpspi,property=zero-wire-time,value=on') !== measurements.turbo) {
         throw new Error('Runtime timing options do not match the Turbo selection');
@@ -162,7 +209,36 @@ try {
         console.log(`Home milestone: ${measurements.home_milestone_s.toFixed(3)} s`);
         // As in smoke.sh, wait for thumbnail generation to settle before input.
         await waitFor(`${consoleText}?.includes('[MEM]')`);
-        measurements.settled_s = (Date.now() - start) / 1000;
+        measurements.settled_s = ((await waitFor('window.smokeSettledEpoch')) - start) / 1000;
+        measurements.home_to_settled_s = measurements.settled_s - measurements.page_load_to_home_s;
+        measurements.log_lines = await evaluate('window.smokeLogLines');
+        const log = await evaluate(consoleText);
+        measurements.wait_lines = (log.match(/\[\d+\]\s+Wait complete:[^\r\n]+/g) || []).slice(0, 8);
+        if (process.env.REFERENCE_LOG && sleepOff && !measurements.turbo) {
+            const reference = (fs.readFileSync(process.env.REFERENCE_LOG, 'utf8')
+                .match(/\[\d+\]\s+Wait complete:[^\r\n]+/g) || []).slice(0, 8);
+            if (reference.length !== 8 || JSON.stringify(measurements.wait_lines) !== JSON.stringify(reference)) {
+                throw new Error('Browser wait timestamps differ from reference');
+            }
+        }
+        await profileQueue;
+        if (errors.length) throw new Error(JSON.stringify(errors));
+        if (profiling && !workers.size) throw new Error('No worker profiles captured');
+        if (process.env.REFERENCE_PPM) {
+            await evaluate(`document.querySelector('iframe').contentWindow.command('screendump /smoke.ppm panel')`);
+            await waitFor(`document.querySelector('iframe').contentWindow.Module.FS.analyzePath('/smoke.ppm').exists`);
+            const bytes = await evaluate(`Array.from(document.querySelector('iframe').contentWindow.Module.FS.readFile('/smoke.ppm'))`);
+            const ppm = Buffer.from(bytes);
+            fs.writeFileSync(path.join(evidence, 'web.ppm'), ppm);
+            measurements.ppm_sha256 = createHash('sha256').update(ppm).digest('hex');
+            if (!ppm.equals(fs.readFileSync(process.env.REFERENCE_PPM))) throw new Error('Browser PPM differs from reference');
+        }
+        if (process.env.BENCH_ONLY === '1') {
+            fs.writeFileSync(path.join(evidence, 'web.log'), await evaluate(consoleText));
+            fs.writeFileSync(path.join(evidence, 'web-measurements.json'), JSON.stringify(measurements, null, 2) + '\n');
+            console.log(JSON.stringify(measurements, null, 2));
+            break smoke;
+        }
         await screenshot('web-home.png');
         const before = await evaluate(`${canvas}.toDataURL()`);
         await evaluate('document.querySelector("#keys button:nth-child(6)").click()');

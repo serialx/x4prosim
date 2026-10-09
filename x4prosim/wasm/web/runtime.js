@@ -57,11 +57,13 @@ window.addEventListener('message', async ({source, origin, data}) => {
         command('stop\ninfo status');
     } else if (data.type === 'boot') {
         const {machine, flash, sd, rom, turbo} = data;
+        // Keep the default pacing; allow deterministic benchmark runs to opt out.
+        const sleep = turbo || new URLSearchParams(parent.location.search).get('sleep') === 'off' ? 'off' : 'on';
         window.Module = {
             canvas,
             arguments: ['-L', '/', '-machine', machine,
                 '-accel', 'tcg,tb-size=64',
-                '-icount', `shift=${machine === 'x3' ? 0 : 2},sleep=${turbo ? 'off' : 'on'}`,
+                '-icount', `shift=${machine === 'x3' ? 0 : 2},sleep=${sleep}`,
                 ...(turbo ? turboProperties(machine) : []),
                 '-drive', 'file=/flash.bin,if=mtd,format=raw,cache.direct=off',
                 '-drive', 'file=/sd.img,if=sd,format=raw,cache.direct=off',

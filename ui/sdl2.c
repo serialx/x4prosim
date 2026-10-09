@@ -36,7 +36,7 @@
 #include "qemu-main.h"
 
 #ifdef __EMSCRIPTEN__
-#include <emscripten.h>
+#include <emscripten/threading.h>
 #endif
 
 #ifdef CONFIG_X11
@@ -687,8 +687,8 @@ void sdl2_poll_events(struct sdl2_console *scon)
     }
 
 #ifdef __EMSCRIPTEN__
-    /* Browser input callbacks are queued on the main application pthread. */
-    emscripten_sleep(0);
+    /* Drain browser input without yielding while the display holds BQL. */
+    emscripten_current_thread_process_queued_calls();
 #endif
     while (SDL_PollEvent(ev)) {
         switch (ev->type) {
