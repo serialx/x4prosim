@@ -2297,7 +2297,8 @@ static sd_rsp_type_t sd_cmd_SEND_OP_COND(SDState *sd, SDRequest req)
     }
 
     if (sd_is_spi(sd)) {
-        sd->state = sd_ready_state;
+        /* SPI has no CMD2/CMD3/CMD7 selection phase after initialization. */
+        sd->state = sd_transfer_state;
         return sd_r1;
     } else {
         if (FIELD_EX32(sd->ocr & req.arg, OCR, VDD_VOLTAGE_WINDOW)) {
