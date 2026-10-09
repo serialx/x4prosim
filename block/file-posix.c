@@ -110,7 +110,7 @@
 #include <sys/diskslice.h>
 #endif
 
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 #include <sys/ioctl.h>
 #endif
 
@@ -2007,7 +2007,7 @@ static int handle_aiocb_write_zeroes_unmap(void *opaque)
 }
 
 #ifndef HAVE_COPY_FILE_RANGE
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 static
 #endif
 ssize_t copy_file_range(int in_fd, off_t *in_off, int out_fd,

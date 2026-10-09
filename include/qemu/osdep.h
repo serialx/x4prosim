@@ -164,11 +164,11 @@ QEMU_EXTERN_C int daemon(int, int);
 #include "sysemu/os-win32.h"
 #endif
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 #include "sysemu/os-posix.h"
 #endif
 
-#if defined(EMSCRIPTEN)
+#if defined(__EMSCRIPTEN__)
 #include "sysemu/os-wasm.h"
 #endif
 

@@ -26,7 +26,7 @@ static inline void flush_idcache_range(uintptr_t rx, uintptr_t rw, size_t len)
     /* icache is coherent and does not require flushing. */
 }
 
-#elif defined(EMSCRIPTEN)
+#elif defined(__EMSCRIPTEN__)
 
 static inline void flush_idcache_range(uintptr_t rx, uintptr_t rw, size_t len)
 {

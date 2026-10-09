@@ -34,7 +34,7 @@
 
 #include "qemu/error-report.h"
 #include "qemu/log.h"
-#include "system/runstate.h"
+#include "sysemu/runstate.h"
 #include "qemu/cutils.h"
 
 void os_setup_post(void){}
@@ -91,29 +91,16 @@ void os_setup_limits(void)
         return;
     }
 }
-int os_mlock(bool on_fault)
+int os_mlock(void)
 {
 #ifdef HAVE_MLOCKALL
-    int ret = 0;
-    int flags = MCL_CURRENT | MCL_FUTURE;
+    int ret = mlockall(MCL_CURRENT | MCL_FUTURE);
 
-    if (on_fault) {
-#ifdef HAVE_MLOCK_ONFAULT
-        flags |= MCL_ONFAULT;
-#else
-        error_report("mlockall: on_fault not supported");
-        return -EINVAL;
-#endif
-    }
-
-    ret = mlockall(flags);
     if (ret < 0) {
         error_report("mlockall: %s", strerror(errno));
     }
-
     return ret;
 #else
-    (void)on_fault;
     return -ENOSYS;
 #endif
 }

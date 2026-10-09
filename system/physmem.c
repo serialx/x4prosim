@@ -1235,7 +1235,7 @@ long qemu_maxrampagesize(void)
     return pagesize;
 }
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 static int64_t get_file_size(int fd)
 {
     int64_t size;
@@ -1941,7 +1941,7 @@ out_free:
     }
 }
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, MemoryRegion *mr,
                                  uint32_t ram_flags, int fd, off_t offset,
                                  Error **errp)
@@ -2131,7 +2131,7 @@ static void reclaim_ramblock(RAMBlock *block)
         ;
     } else if (xen_enabled()) {
         xen_invalidate_map_cache_entry(block->host);
-#if !defined(_WIN32) && !defined(EMSCRIPTEN)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     } else if (block->fd >= 0) {
         qemu_ram_munmap(block->fd, block->host, block->max_length);
         close(block->fd);

@@ -360,7 +360,7 @@ elif check_define __NetBSD__; then
   host_os=netbsd
 elif check_define __APPLE__; then
   host_os=darwin
-elif check_define EMSCRIPTEN ; then
+elif check_define __EMSCRIPTEN__ ; then
   host_os=emscripten
   cpu=wasm32
   cross_compile="yes"

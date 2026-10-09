@@ -4764,7 +4764,7 @@ SRST
     Start right away with a saved state (``loadvm`` in monitor)
 ERST
 
-#if !defined(_WIN32) && !defined(EMSCRIPTEN)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 DEF("daemonize", 0, QEMU_OPTION_daemonize, \
     "-daemonize      daemonize QEMU after initializing\n", QEMU_ARCH_ALL)
 #endif
@@ -4969,7 +4969,7 @@ SRST
     ``-nodefaults`` option will disable all those default devices.
 ERST
 
-#if !defined(_WIN32) && !defined(EMSCRIPTEN)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 DEF("runas", HAS_ARG, QEMU_OPTION_runas, \
     "-runas user     change to user id user just before starting the VM\n" \
     "                user can be numeric uid:gid instead\n",
@@ -5143,7 +5143,7 @@ HXCOMM Internal use
 DEF("qtest", HAS_ARG, QEMU_OPTION_qtest, "", QEMU_ARCH_ALL)
 DEF("qtest-log", HAS_ARG, QEMU_OPTION_qtest_log, "", QEMU_ARCH_ALL)
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 DEF("run-with", HAS_ARG, QEMU_OPTION_run_with,
     "-run-with [async-teardown=on|off][,chroot=dir][user=username|uid:gid]\n"
     "                Set miscellaneous QEMU process lifecycle options:\n"

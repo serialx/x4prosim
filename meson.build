@@ -1238,9 +1238,11 @@ if not get_option('slirp').auto() or have_system
     slirp_cflags += ['-DLIBSLIRP_STATIC'] 
   endif
 
-  slirp = declare_dependency(dependencies: [slirp_dep],
-                          compile_args: slirp_cflags,
-                          version: slirp_dep.version())
+  if slirp_dep.found()
+    slirp = declare_dependency(dependencies: [slirp_dep],
+                              compile_args: slirp_cflags,
+                              version: slirp_dep.version())
+  endif
 
   # slirp < 4.7 is incompatible with CFI support in QEMU.  This is because
   # it passes function pointers within libslirp as callbacks for timers.
@@ -1563,7 +1565,13 @@ endif
 
 sdl = not_found
 if not get_option('sdl').auto() or have_system
-  sdl = dependency('sdl2', required: get_option('sdl'))
+  if host_os == 'emscripten' and not get_option('sdl').disabled()
+    # Emscripten builds SDL from its port; the host SDL package is not usable.
+    sdl = declare_dependency(compile_args: ['-sUSE_SDL=2'],
+                             link_args: ['-sUSE_SDL=2'])
+  else
+    sdl = dependency('sdl2', required: get_option('sdl'))
+  endif
   sdl_image = not_found
 endif
 if sdl.found()
@@ -1828,10 +1836,13 @@ if not gnutls_crypto.found()
     # as it "spreads unnecessary dependencies" which in
     # turn breaks static builds...
     if gcrypt.found() and get_option('prefer_static')
-      gcrypt = declare_dependency(dependencies:
-        [gcrypt,
-         cc.find_library('gpg-error', required: true)],
-        version: gcrypt.version())
+      # pkg-config also locates libraries outside the compiler's sysroot.
+      gpg_error = dependency('gpg-error', required: false)
+      if not gpg_error.found()
+        gpg_error = cc.find_library('gpg-error', required: true)
+      endif
+      gcrypt = declare_dependency(dependencies: [gcrypt, gpg_error],
+                                 version: gcrypt.version())
     endif
     crypto_sm4 = gcrypt
     # SM4 ALG is available in libgcrypt >= 1.9

@@ -196,7 +196,7 @@ void *qemu_anon_ram_alloc(size_t size, uint64_t *alignment, bool shared,
     const uint32_t qemu_map_flags = (shared ? QEMU_MAP_SHARED : 0) |
                                     (noreserve ? QEMU_MAP_NORESERVE : 0);
     size_t align = QEMU_VMALLOC_ALIGN;
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
     void *ptr = qemu_ram_mmap(-1, size, align, qemu_map_flags, 0);
 
     if (ptr == MAP_FAILED) {
@@ -223,7 +223,7 @@ void *qemu_anon_ram_alloc(size_t size, uint64_t *alignment, bool shared,
 void qemu_anon_ram_free(void *ptr, size_t size)
 {
     trace_qemu_anon_ram_free(ptr, size);
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
     qemu_ram_munmap(-1, ptr, size);
 #else
     /*
@@ -593,7 +593,7 @@ bool qemu_prealloc_mem(int fd, char *area, size_t sz, int max_threads,
 {
     static gsize initialized;
     int ret;
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
     size_t hpagesize = qemu_fd_getpagesize(fd);
 #else
     /*
