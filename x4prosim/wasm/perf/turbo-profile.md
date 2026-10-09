@@ -1,5 +1,139 @@
 # X3 boot profile: native and Wasm64
 
+## After round 2 integration: 2026-10-10
+
+Accurate Node `sleep=off` reaches Home in **2.394 s** and settled in **12.464 s**
+(three-run medians). Node **Home < 3.25 s: reached; settled < 10.06 s: not reached**.
+Its Home-to-settled phase is **10.064 s**, above the observed **6.799 s** of guest time.
+
+Accurate Chrome `sleep=off` reaches Home in **3.069 s** and settled in **14.758 s**:
+**Home < 3.25 s: reached; settled < 10.06 s: not reached**. Sleep-on Chrome also misses
+both targets. Turbo is a separate opt-in mode that changes device delays: Node
+**1.097/4.789 s** and Chrome **1.636/5.558 s** (Home/total). Both turbo runtimes meet
+both numeric thresholds, but turbo does **not** establish timing-accurate target
+attainment.
+
+### Selected changes and provenance
+
+| Integrated commit | Origin | Decision |
+| --- | --- | --- |
+| `2890d276fa` | already on the integration branch | retain optional turbo; accurate mode remains the default |
+| `cc242a0e1c` | `8cf9dbca38` / G | ship synchronous SDL proxy-queue draining |
+
+The G commit was cherry-picked with `-x` onto the current turbo HEAD. Its runtime
+conflict was resolved by preserving turbo properties and adding the accurate `sleep=off`
+query; smoke checks recognize both modes and exempt turbo from accurate timestamp
+comparison. No backend/build candidate was selected. A2 was rejected by its experiment.
+E2 was evaluated quietly and left unshipped; no BQL-batching code remains in the final
+sources.
+
+### Quiet final timings
+
+Apple M5 Max, Node 26.11.0, Chrome 155, Emscripten 6.0.12; default Wasm `MEMORY64=2`.
+Each row is three fresh-process runs with original flash/SD copies. Builds and profilers
+did not overlap timing runs; per-run process snapshots are retained. Ordinary desktop
+services remained active. Each cell is an independent median, so phase medians need not
+sum to the median total. Chrome Home and total include navigation, image loading and
+startup; settled uses the exact first MEM message, not the polling observation.
+
+| Runtime / mode | Home s | Home → settled s | Settled total s |
+| --- | ---: | ---: | ---: |
+| Native, sleep off | 1.785 | 8.789 | 10.574 |
+| Native, sleep on | 4.124 | 11.695 | 15.819 |
+| Node JIT, sleep off | 2.394 | 10.064 | 12.464 |
+| Node JIT, sleep on | 4.635 | 13.073 | 17.708 |
+| Chrome JIT, sleep off | 3.069 | 11.656 | 14.758 |
+| Chrome JIT, sleep on | 5.264 | 14.091 | 19.355 |
+| Node JIT, turbo | 1.097 | 3.706 | 4.789 |
+| Chrome JIT, turbo | 1.636 | 3.917 | 5.558 |
+
+Chrome runs used fresh user-data directories with GPU/WebGL enabled and no
+`--disable-gpu`. Browser timings are not a new browser A/B speedup claim; the selected
+commit carries its original three-pair experiment results.
+
+### E2 qualification and native non-regression
+
+The exact `e2-native-preserved.patch` was applied on top of `2890d276fa`, with turbo
+disabled. Native and Node each ran A/B/A/B/A/B against saved pre-patch binaries. All 12
+runs passed PPM and timestamp equality. Native Home non-regression remained unproven:
+the median paired Home ratio was **1.0213**, despite post-Home **0.9856** and total
+**0.9914**. Node ratios were **0.9016 / 0.9504 / 0.9295**. This small native startup
+difference does not prove a causal regression, but it fails the strict qualification
+gate, so E2 was restored out of source.
+
+The shipped G C change is entirely under `__EMSCRIPTEN__` and does not change native
+execution. The turbo commit was already integrated and remains off in accurate
+measurements. Native final timings are reported above; no new native optimization or BQL
+change is shipped. Full E2 pairs and the decision are in `integration2/e2-decision.txt`.
+
+### Correctness and validation
+
+All 15 final native/Node timings, nine browser timings, and the separate after-profile
+match native PPM SHA256
+`b95efa19c1fa99c2abd97fb32ed1a729ecb25a17147198857067ac25523a4c5c`. All accurate
+sleep-off runs retain the eight native wait lines:
+
+```text
+1115 X3_PON 127; 2050 X3_DRF 935; 2723 X3_DRF 383; 3250 X3_DRF 382
+3741 X3_DRF 382; 4224 X3_DRF 382; 4701 X3_DRF 382; 8747 X3_DRF 382
+```
+
+Settled is guest 10049 ms in these original inputs. Sleep-on timestamps are not required
+to match because idle warping varies with host scheduling; turbo intentionally changes
+guest deadlines. Both Wasm modes build/package both targets, native links both targets,
+and default/ROM-only/turbo smoke passes in both Wasm modes. AIO (27), block-backend (4),
+and block-drain (30) subtests pass. A separate fresh Chrome control run verifies panel
+rendering, on-screen Down, keyboard Up, SD export with guest writes, reset, and stop. X4
+Pro coverage remains ROM/panel only.
+
+### Fresh after-profile
+
+One separate Node `sleep=off` vCPU profile, excluded from timing medians, reaches Home
+at **2.475 s** and settled at **12.798 s** (post-Home **10.323 s**). Percentages
+describe sampled elapsed time including waits; this single profile is exploratory.
+
+| Category | Home self % | Home → settled self % |
+| --- | ---: | ---: |
+| Helpers / softmmu / MMIO | 29.47 | 31.31 |
+| Other QEMU / runtime | 19.73 | 20.01 |
+| Wait | 16.19 | 15.96 |
+| Dispatch / main loop / timers / icount | 10.30 | 12.67 |
+| JIT TB modules | 8.59 | 10.88 |
+| TCI / libffi | 4.96 | 2.25 |
+| Device models (combined) | 1.01 | 2.24 |
+| Asyncify / fibers (visible) | 2.57 | 1.94 |
+| JS glue / V8 | 2.38 | 1.56 |
+| Translation / lookup | 3.95 | 0.91 |
+| Module constructors / hooks | 0.85 | 0.28 |
+
+| Post-Home self symbol | Sampled ms | Self % |
+| --- | ---: | ---: |
+| `_do_futex_wait` | 1647.6 | 15.96 |
+| `TB entry (generated modules)` | 1122.8 | 10.88 |
+| `cpu_tb_exec` | 826.0 | 8.00 |
+| `do_ld_mmio_beN` | 639.0 | 6.19 |
+| `do_ld4_mmu` | 417.9 | 4.05 |
+| `memory_region_dispatch_read` | 342.6 | 3.32 |
+| `access_with_adjusted_size` | 341.9 | 3.31 |
+| `mmu_lookup` | 271.5 | 2.63 |
+| `do_proxy` | 262.0 | 2.54 |
+| `mmu_lookup1` | 246.7 | 2.39 |
+| `tcg_qemu_tb_exec_tci` | 221.9 | 2.15 |
+| `memory_region_resolve_subpage` | 215.4 | 2.09 |
+
+Mutex/BQL symbols account for **9.15%** of post-Home self time (sum of matching symbols
+across categories). The runtime bucket is therefore not wholly unattributed: lock/unlock
+and BQL bookkeeping are material, alongside proxy crossings and Wasm/JS transitions. E2
+demonstrates a Node benefit from reducing repeated lock acquisition, but its native
+qualification remains unresolved. The browser-only SDL fix does not remove these
+headless Node costs. Revisit that qualification or target MMIO/helper work with a new
+controlled experiment; the current accurate-mode settled target remains unmet.
+
+Raw evidence: `build-wasm/evidence/integration2/`, including `measurements.json`,
+`chrome-measurements.json`, `e2-results.json`, per-run logs/PPMs/argv/process snapshots,
+`after-profile-analysis.json`, build/test logs, and reproduction scripts. The full
+execution report is `build-wasm/evidence/integration2-report.txt`.
+
 ## After integration: 2026-10-10
 
 The combined changes reach Home in **2.632 s** and settled in **12.648 s**
