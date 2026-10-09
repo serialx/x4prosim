@@ -264,6 +264,11 @@ static void esp_rgb_realize(DeviceState *dev, Error **errp)
     ESPRgbState* s = ESP_RGB(dev);
 
     assert(s->intram != NULL);
+    /* Allocate guest framebuffer storage only for a realized RGB device. */
+    memory_region_init_ram(&s->vram, OBJECT(s), "esp-rgb-vram",
+                           ESP_RGB_MAX_VRAM_SIZE, &error_abort);
+    address_space_init(&s->vram_as, &s->vram, "esp.rgb.vram_as");
+
     /* Create an address space for internal RAM so that we can read data from it on GUI update */
     address_space_init(&s->intram_as, s->intram, "esp.rgb.intram_as");
 
@@ -300,12 +305,6 @@ static void esp_rgb_init(Object *obj)
     s->height = ESP_RGB_MAX_HEIGHT;
     s->update_area = false;
     s->bpp = DEFAULT_BPP;
-
-    /* Create a memory region that can be used as a framebuffer by the guest */
-    memory_region_init_ram(&s->vram, OBJECT(s), "esp-rgb-vram", ESP_RGB_MAX_VRAM_SIZE, &error_abort);
-
-    /* Create an AddressSpace out of the MemoryRegion to be able to perform DMA */
-    address_space_init(&s->vram_as, &s->vram, "esp.rgb.vram_as");
 }
 
 
