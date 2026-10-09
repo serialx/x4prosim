@@ -52,7 +52,7 @@ Other firmware may not print those CrossPoint-specific progress messages.
 Automated acceptance (Node 22+ and Chrome; no npm dependencies):
   # In separate terminals, start serve.py as above and Chrome:
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-    --headless=new --disable-gpu --remote-debugging-port=9224 \
+    --headless=new --remote-debugging-port=9224 \
     --user-data-dir=/tmp/x4prosim-chrome --no-first-run about:blank
   node x4prosim/wasm/web/smoke.mjs \
     'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
