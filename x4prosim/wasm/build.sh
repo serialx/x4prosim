@@ -2,6 +2,11 @@
 # Build the X3 and X4 Pro system emulators with Homebrew Emscripten and TCI.
 # Run build-deps.sh first. Build artifacts and compiler caches stay in the repo.
 set -euo pipefail
+WEB=0
+if [ "${1:-}" = --web ]; then
+    WEB=1
+    shift
+fi
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SYSROOT="$ROOT/build-wasm-deps/sysroot"
 JOBS=${JOBS:-$(sysctl -n hw.ncpu)}
@@ -26,7 +31,7 @@ LINK_FLAGS="-O3 -g2 $LDFLAGS -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM=1"
 LINK_FLAGS+=" -sALLOW_TABLE_GROWTH=1 -sALLOW_MEMORY_GROWTH=1"
 LINK_FLAGS+=" -sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=2147483648"
 LINK_FLAGS+=" -sSTACK_SIZE=8388608 -sASYNCIFY_STACK_SIZE=1048576"
-LINK_FLAGS+=" -sEXIT_RUNTIME=1 -sEXPORT_ES6=0 -sASYNCIFY_IMPORTS=ffi_call_js"
+LINK_FLAGS+=" -sEXIT_RUNTIME=1 -sEXPORT_ES6=0 -sENVIRONMENT=web,worker,node -sASYNCIFY_IMPORTS=ffi_call_js"
 LINK_FLAGS+=" -sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS"
 LINK_FLAGS+=" -lnodefs.js --pre-js $ROOT/x4prosim/wasm/node-fs.js"
 mkdir -p "$ROOT/build-wasm"
@@ -43,3 +48,7 @@ emconfigure ../configure \
     -Dc_link_args="$LINK_FLAGS" -Dcpp_link_args="$LINK_FLAGS" \
     "$@"
 ninja -j"$JOBS" qemu-system-riscv32.js qemu-system-xtensa.js
+
+if [ "$WEB" = 1 ]; then
+    "$ROOT/x4prosim/wasm/package-web.sh"
+fi

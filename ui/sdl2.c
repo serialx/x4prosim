@@ -34,6 +34,10 @@
 #include "sysemu/sysemu.h"
 #include "qemu/log.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 static int sdl2_num_outputs;
 static struct sdl2_console *sdl2_console;
 
@@ -651,6 +655,10 @@ void sdl2_poll_events(struct sdl2_console *scon)
         sdl_update_caption(scon);
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Browser input callbacks are queued on the main application pthread. */
+    emscripten_sleep(0);
+#endif
     while (SDL_PollEvent(ev)) {
         switch (ev->type) {
         case SDL_KEYDOWN:
