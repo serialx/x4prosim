@@ -40,6 +40,25 @@
 
 TBContext tb_ctx;
 
+#ifdef HOST_WASM64
+/* A hint only limits TB length; stale mappings cannot change instructions. */
+#define IO_TB_HINTS 1024
+static __thread struct {
+    vaddr pc;
+    uint64_t cs_base;
+    tb_page_addr_t phys_pc;
+    uint32_t flags;
+    uint32_t cflags;
+    unsigned flush_count;
+    unsigned insns;
+} io_tb_hints[IO_TB_HINTS];
+
+static unsigned io_tb_hint_index(vaddr pc)
+{
+    return (pc ^ (pc >> 10)) & (IO_TB_HINTS - 1);
+}
+#endif
+
 /*
  * Encode VAL as a signed leb128 sequence at P.
  * Return P incremented past the encoded value.
@@ -316,6 +335,21 @@ TranslationBlock *tb_gen_code(CPUState *cpu, TCGTBCPUState s)
     if (max_insns == 0) {
         max_insns = TCG_MAX_INSNS;
     }
+#ifdef HOST_WASM64
+    if (s.cflags & CF_USE_ICOUNT) {
+        unsigned h = io_tb_hint_index(s.pc);
+        unsigned flush_count = qatomic_read(&tb_ctx.tb_flush_count);
+
+        if (io_tb_hints[h].insns && io_tb_hints[h].pc == s.pc &&
+            io_tb_hints[h].cs_base == s.cs_base &&
+            io_tb_hints[h].phys_pc == phys_pc &&
+            io_tb_hints[h].flags == s.flags &&
+            io_tb_hints[h].cflags == s.cflags &&
+            io_tb_hints[h].flush_count == flush_count) {
+            max_insns = MIN(max_insns, io_tb_hints[h].insns);
+        }
+    }
+#endif
     QEMU_BUILD_BUG_ON(CF_COUNT_MASK + 1 != TCG_MAX_INSNS);
 
  buffer_overflow:
@@ -618,6 +652,37 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
                   (void *)retaddr);
     }
     cpu_restore_state_from_tb(cpu, tb, retaddr);
+
+#ifdef HOST_WASM64
+    /*
+     * Retain an ordinary-cflags TB ending at the observed I/O instruction.
+     * The existing one-instruction retry still completes this first access.
+     * Following executions can then perform I/O without an exception.
+     * Delay-slot targets and position-independent TBs need a different
+     * boundary key.
+     */
+    if ((tb_cflags(tb) & CF_USE_ICOUNT) &&
+        !(tb_cflags(tb) & (CF_PCREL | CF_COUNT_MASK | CF_MEMI_ONLY |
+                          CF_NOIRQ | CF_SINGLE_STEP)) &&
+        tb_page_addr0(tb) != -1 &&
+        !cc->tcg_ops->io_recompile_replay_branch) {
+        uint64_t data[INSN_START_WORDS];
+        int left = cpu_unwind_data_from_tb(tb, retaddr, data, NULL);
+
+        if (left > 1) {
+            unsigned h = io_tb_hint_index(tb->pc);
+
+            io_tb_hints[h].pc = tb->pc;
+            io_tb_hints[h].cs_base = tb->cs_base;
+            io_tb_hints[h].phys_pc = tb_page_addr0(tb);
+            io_tb_hints[h].flags = tb->flags;
+            io_tb_hints[h].cflags = tb_cflags(tb);
+            io_tb_hints[h].flush_count = qatomic_read(&tb_ctx.tb_flush_count);
+            io_tb_hints[h].insns = tb->icount - left + 1;
+            tb_phys_invalidate(tb, -1);
+        }
+    }
+#endif
 
     /*
      * Some guests must re-execute the branch when re-executing a delay
