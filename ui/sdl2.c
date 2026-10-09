@@ -35,6 +35,10 @@
 #include "qemu/log.h"
 #include "qemu-main.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #ifdef CONFIG_X11
 #include <X11/Xlib.h>
 #endif
@@ -682,6 +686,10 @@ void sdl2_poll_events(struct sdl2_console *scon)
         sdl_update_caption(scon);
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Browser input callbacks are queued on the main application pthread. */
+    emscripten_sleep(0);
+#endif
     while (SDL_PollEvent(ev)) {
         switch (ev->type) {
         case SDL_KEYDOWN:
