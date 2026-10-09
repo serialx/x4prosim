@@ -1623,7 +1623,7 @@ bool memory_region_init_resizeable_ram(MemoryRegion *mr,
     return memory_region_set_ram_block(mr, rb);
 }
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 bool memory_region_init_ram_from_file(MemoryRegion *mr, Object *owner,
                                       const char *name, uint64_t size,
                                       uint64_t align, uint32_t ram_flags,

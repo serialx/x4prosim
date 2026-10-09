@@ -9,7 +9,7 @@
 #ifndef TCG_HELPER_INFO_H
 #define TCG_HELPER_INFO_H
 
-#if defined(CONFIG_TCG_INTERPRETER) || defined(EMSCRIPTEN)
+#if defined(CONFIG_TCG_INTERPRETER) || defined(__EMSCRIPTEN__)
 /*
  * MacOSX 15 uses an old version of libffi which contains
  *   #if FFI_GO_CLOSURES
@@ -60,7 +60,7 @@ struct TCGHelperInfo {
     const char *name;
 
     /* Used with g_once_init_enter. */
-#if defined(CONFIG_TCG_INTERPRETER) || defined(EMSCRIPTEN)
+#if defined(CONFIG_TCG_INTERPRETER) || defined(__EMSCRIPTEN__)
     ffi_cif *cif;
 #else
     uintptr_t init;

@@ -1546,7 +1546,7 @@ long qemu_maxrampagesize(void)
     return pagesize;
 }
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 static int64_t get_file_size(int fd)
 {
     int64_t size;
@@ -2301,7 +2301,7 @@ out_free:
     }
 }
 
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
 RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, ram_addr_t max_size,
                                  qemu_ram_resize_cb resized, MemoryRegion *mr,
                                  uint32_t ram_flags, int fd, off_t offset,
@@ -2482,7 +2482,7 @@ RAMBlock *qemu_ram_alloc_internal(ram_addr_t size, ram_addr_t max_size,
     assert(max_size >= size);
 
     /* ignore RAM_SHARED for Windows and emscripten*/
-#if defined(CONFIG_POSIX) && !defined(EMSCRIPTEN)
+#if defined(CONFIG_POSIX) && !defined(__EMSCRIPTEN__)
     if (!host) {
         if (!share_flags && current_machine->aux_ram_share) {
             ram_flags |= RAM_SHARED;
@@ -2579,7 +2579,7 @@ static void reclaim_ramblock(RAMBlock *block)
         ;
     } else if (xen_map_cache_enabled()) {
         xen_invalidate_map_cache_entry(block->host);
-#if !defined(_WIN32) && !defined(EMSCRIPTEN)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     } else if (block->fd >= 0) {
         qemu_ram_munmap(block->fd, block->host, block->max_length);
         close(block->fd);

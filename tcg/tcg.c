@@ -248,7 +248,7 @@ TCGv_env tcg_env;
 const void *tcg_code_gen_epilogue;
 ptrdiff_t tcg_splitwx_diff;
 
-#if !defined(CONFIG_TCG_INTERPRETER) && !defined(EMSCRIPTEN)
+#if !defined(CONFIG_TCG_INTERPRETER) && !defined(__EMSCRIPTEN__)
 tcg_prologue_fn *tcg_qemu_tb_exec;
 #endif
 
@@ -1411,7 +1411,7 @@ static TCGHelperInfo info_helper_st128_mmu = {
               | dh_typemask(ptr, 5)  /* uintptr_t ra */
 };
 
-#if defined(CONFIG_TCG_INTERPRETER) || defined(EMSCRIPTEN)
+#if defined(CONFIG_TCG_INTERPRETER) || defined(__EMSCRIPTEN__)
 static ffi_type *typecode_to_ffi(int argmask)
 {
     /*
@@ -1488,7 +1488,7 @@ static ffi_cif *init_ffi_layout(TCGHelperInfo *info)
 #else
 #define HELPER_INFO_INIT(I)      (&(I)->init)
 #define HELPER_INFO_INIT_VAL(I)  1
-#endif /* CONFIG_TCG_INTERPRETER || EMSCRIPTEN */
+#endif /* CONFIG_TCG_INTERPRETER || __EMSCRIPTEN__ */
 
 static inline bool arg_slot_reg_p(unsigned arg_slot)
 {
@@ -1862,7 +1862,7 @@ void tcg_prologue_init(void)
     s->code_buf = s->code_gen_ptr;
     s->data_gen_ptr = NULL;
 
-#if !defined(CONFIG_TCG_INTERPRETER) && !defined(EMSCRIPTEN)
+#if !defined(CONFIG_TCG_INTERPRETER) && !defined(__EMSCRIPTEN__)
     tcg_qemu_tb_exec = (tcg_prologue_fn *)tcg_splitwx_to_rx(s->code_ptr);
 #endif
 
@@ -1881,7 +1881,7 @@ void tcg_prologue_init(void)
     prologue_size = tcg_current_code_size(s);
     perf_report_prologue(s->code_gen_ptr, prologue_size);
 
-#if !defined(CONFIG_TCG_INTERPRETER) && !defined(EMSCRIPTEN)
+#if !defined(CONFIG_TCG_INTERPRETER) && !defined(__EMSCRIPTEN__)
     flush_idcache_range((uintptr_t)tcg_splitwx_to_rx(s->code_buf),
                         (uintptr_t)s->code_buf, prologue_size);
 #endif
@@ -1918,7 +1918,7 @@ void tcg_prologue_init(void)
         }
     }
 
-#if !defined(CONFIG_TCG_INTERPRETER) && !defined(EMSCRIPTEN)
+#if !defined(CONFIG_TCG_INTERPRETER) && !defined(__EMSCRIPTEN__)
     /*
      * Assert that goto_ptr is implemented completely, setting an epilogue.
      * For tci, we use NULL as the signal to return from the interpreter,
@@ -6778,7 +6778,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb, uint64_t pc_start)
         return i;
     }
 
-#if !defined(CONFIG_TCG_INTERPRETER) && !defined(EMSCRIPTEN)
+#if !defined(CONFIG_TCG_INTERPRETER) && !defined(__EMSCRIPTEN__)
     /* flush instruction cache */
     flush_idcache_range((uintptr_t)tcg_splitwx_to_rx(s->code_buf),
                         (uintptr_t)s->code_buf,

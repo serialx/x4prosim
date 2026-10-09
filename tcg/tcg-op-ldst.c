@@ -125,7 +125,7 @@ static void tcg_gen_req_mo(TCGBar type)
 
 static TCGTemp *tci_extend_addr(TCGTemp *addr)
 {
-#if defined(CONFIG_TCG_INTERPRETER) || defined(EMSCRIPTEN)
+#if defined(CONFIG_TCG_INTERPRETER) || defined(__EMSCRIPTEN__)
     /*
      * 64-bit interpreter requires 64-bit addresses.
      * Compare to the extension performed by tcg_out_{ld,st}_helper_args

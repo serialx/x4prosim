@@ -13,7 +13,7 @@
 #endif
 
 /* GETPC is the true target of the return instruction that we'll execute.  */
-#if defined(CONFIG_TCG_INTERPRETER) || defined(EMSCRIPTEN)
+#if defined(CONFIG_TCG_INTERPRETER) || defined(__EMSCRIPTEN__)
 extern __thread uintptr_t tci_tb_ptr;
 # define GETPC() tci_tb_ptr
 #else
