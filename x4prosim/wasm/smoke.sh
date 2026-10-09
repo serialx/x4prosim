@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# CI: smoke.sh flash.bin sd.img; optional TIMEOUT, EVIDENCE_DIR, NODE.
+# smoke.sh flash.bin sd.img or --rom-only (CI without firmware).
+# Optional TIMEOUT, EVIDENCE_DIR, NODE.
 # Images are copied; logs, PPM screenshots and measurements remain in evidence/.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -15,12 +16,17 @@ import sys
 import time
 
 root = Path(sys.argv[1])
-if len(sys.argv) != 4:
-    sys.exit('usage: smoke.sh flash.bin sd.img')
+rom_only = sys.argv[2:] == ['--rom-only']
+if not rom_only and len(sys.argv) != 4:
+    sys.exit('usage: smoke.sh flash.bin sd.img | --rom-only')
 evidence = Path(os.environ.get('EVIDENCE_DIR', root / 'build-wasm/evidence/smoke')).resolve()
 evidence.mkdir(parents=True, exist_ok=True)
-for src, dest in zip(sys.argv[2:], ('flash.bin', 'sd.img')):
-    shutil.copyfile(src, evidence / dest)
+if rom_only:
+    subprocess.run([sys.executable, str(root / 'x4prosim/mksd.py'),
+                    str(evidence / 'sd.img'), '64'], check=True)
+else:
+    for src, dest in zip(sys.argv[2:], ('flash.bin', 'sd.img')):
+        shutil.copyfile(src, evidence / dest)
 (evidence / 'blank.bin').write_bytes(bytes(16 * 1024 * 1024))
 timeout = float(os.environ.get('TIMEOUT', '600'))
 # Native CrossPoint reaches Home by the third completed panel refresh.
@@ -120,10 +126,12 @@ def run(machine, flash):
 
 
 try:
-    run('x3', evidence / 'flash.bin')
+    if not rom_only:
+        run('x3', evidence / 'flash.bin')
     run('x4pro', evidence / 'blank.bin')
 except Exception as exc:
     sys.exit(str(exc))
 (evidence / 'measurements.json').write_text(json.dumps(measurements, indent=2) + '\n')
-print('PASS: X3 Home refresh and X4 Pro blank-flash ROM; both panel screendumps captured')
+print('PASS: X4 Pro blank-flash ROM and panel screendump' if rom_only else
+      'PASS: X3 Home refresh and X4 Pro blank-flash ROM; both panel screendumps captured')
 PY

@@ -8,8 +8,8 @@ if [ "${1:-}" = --web ]; then
     shift
 fi
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-SYSROOT="$ROOT/build-wasm-deps/sysroot"
-JOBS=${JOBS:-$(sysctl -n hw.ncpu)}
+SYSROOT="${WASM_SYSROOT:-$ROOT/build-wasm-deps/sysroot}"
+JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 export EM_CACHE="${EM_CACHE:-$ROOT/build-wasm-deps/em-cache}"
 export PKG_CONFIG_PATH="$SYSROOT/lib/pkgconfig"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# QEMU v10.1.0 tests/docker/dockerfiles/emsdk-wasm32-cross.docker, on macOS.
+# QEMU v10.1.0 dependency recipe, on macOS or Linux with Emscripten 6.0.12.
 # Uses Homebrew Emscripten/ninja/autoconf/automake/libtool and pinned pip
 # Meson 1.5.0 + tomli in build-wasm-deps/venv. No Docker or changes to QEMU sources are required.
-# Run from any directory. FORCE=1 rebuilds all dependencies from cached sources.
+# Run from any directory. FORCE=1 rebuilds; WASM_SYSROOT reuses a matching sysroot.
 # Downloads (including Meson's PCRE2 fallback) survive rebuilds for offline use.
 # Fork crypto: native build-time generators; portable libgcrypt with asm and
 # jitter entropy disabled. Hide sys/random.h's unsupported getrandom API;
@@ -12,13 +12,17 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD="$ROOT/build-wasm-deps"
 SRC="$BUILD/src"
-SYSROOT="$BUILD/sysroot"
-CROSS="$ROOT/x4prosim/wasm/cross.meson"
-JOBS=${JOBS:-$(sysctl -n hw.ncpu)}
+SYSROOT="${WASM_SYSROOT:-$BUILD/sysroot}"
+CROSS="$BUILD/cross.meson"
+JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 FORCE=${FORCE:-0}
 mkdir -p "$SRC" "$SYSROOT/lib/pkgconfig"
 
 if ! command -v emcc >/dev/null 2>&1; then
+    if [[ "$(uname -s)" != Darwin ]]; then
+        echo 'Install/activate emsdk 6.0.12 before running build-deps.sh' >&2
+        exit 1
+    fi
     # Homebrew serializes installs; retry only its explicit lock error.
     while ! brew install emscripten >"$BUILD/brew.log" 2>&1; do
         cat "$BUILD/brew.log" >&2
@@ -29,9 +33,26 @@ if ! command -v emcc >/dev/null 2>&1; then
     done
 fi
 for tool in emcc em++ emar emranlib emconfigure emmake ninja pkg-config \
-            autoreconf aclocal glibtoolize; do
+            autoreconf aclocal; do
     command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
 done
+
+if ! command -v glibtoolize >/dev/null && ! command -v libtoolize >/dev/null; then
+    echo 'Missing tool: glibtoolize (macOS) or libtoolize (Linux)' >&2
+    exit 1
+fi
+SYSROOT=$(cd "$SYSROOT" && pwd)
+# Meson cannot expand shell environment variables in a cross file.
+python3 - "$ROOT/x4prosim/wasm/cross.meson" "$CROSS" "$SYSROOT" <<'PYTHON'
+from pathlib import Path
+import sys
+source, destination, sysroot = sys.argv[1:]
+quoted = sysroot.replace("\\", "\\\\").replace("'", "\\'")
+text = Path(source).read_text().replace(
+    "sysroot = '@DIRNAME@' / '../../build-wasm-deps/sysroot'",
+    "sysroot = '" + quoted + "'")
+Path(destination).write_text(text)
+PYTHON
 
 # Keep Emscripten's writable compiler cache out of the Homebrew installation.
 export EM_CACHE="${EM_CACHE:-$BUILD/em-cache}"
