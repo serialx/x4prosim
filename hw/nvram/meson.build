@@ -23,3 +23,8 @@ system_ss.add(when: 'CONFIG_ACPI', if_true: files('fw_cfg-acpi.c'))
 system_ss.add(when: 'CONFIG_ASPEED_SOC', if_true: files(
   'aspeed_otp.c',
   ))
+
+system_ss.add(when: 'CONFIG_XTENSA_ESP32', if_true: files('esp32_efuse.c'))
+system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('esp32c3_efuse.c', 'esp_efuse.c'))
+system_ss.add(when: 'CONFIG_RISCV_ESP32C6', if_true: files('esp32c3_efuse.c', 'esp32c6_efuse.c', 'esp_efuse.c'))
+system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32s3_efuse.c', 'esp_efuse.c'))

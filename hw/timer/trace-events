@@ -128,3 +128,11 @@ imx_epit_get_freq(uint32_t freq) "ptimer frequency is %u"
 imx_epit_read(const char *name, uint32_t value) "(%s) = 0x%08x"
 imx_epit_write(const char *name, uint64_t value) "(%s, value = 0x%08" PRIx64 ")"
 imx_epit_cmp(uint32_t sr) "sr was %d"
+
+
+# esp32_frc_timer.c
+esp32_frc_timer_read(uint64_t addr, uint32_t value) "read addr 0x%" PRIx64 " data 0x%" PRIx32
+esp32_frc_timer_write(uint64_t addr, uint32_t value) "write addr 0x%" PRIx64 " data 0x%" PRIx32
+esp32_frc_timer_update_config(uint64_t ns_now, uint32_t count_now, int enable, int level_int, int autoload, uint32_t prescaler) "update now: %" PRIu64 " count: 0x%" PRIx32 " enable: %d level_int: %d autoload: %d prescaler: %" PRIu32
+esp32_frc_timer_cb(uint64_t ns_now, uint32_t count_now) "alarm now: %" PRIu64 " count: 0x%" PRIx32
+esp32_frc_timer_update_alarm(uint64_t ns_now, uint32_t count_now, uint64_t ticks, uint64_t ns_to_alarm) "set alarm now: %" PRIu64 " count: 0x%" PRIx32 " ticks: %" PRIu64 " ns_to_alarm: %" PRIu64

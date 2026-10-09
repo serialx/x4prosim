@@ -41,3 +41,4 @@ config XTENSA_ESP32S3
     select OPENCORES_ETH
     select TMP105
     select CW2017
+    select BM8563
