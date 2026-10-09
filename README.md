@@ -57,6 +57,27 @@ x4prosim/drive.py flash.bin sd.img log.txt wait:30 press:down shot:home.png \
   "hmp:qom-set /machine/gt911 tap 240,529" wait:5 shot:settings.png
 ```
 
+## WebAssembly build
+
+The `x4prosim-<version>-wasm` Actions artifact contains both emulators and a
+browser page. Supply your own 16 MiB flash image; a blank 64 MiB SD card is
+included. Chrome is tested, including the X3 Home screen, keys and SD downloads.
+
+```sh
+# Activate emsdk 6.0.12, or install Homebrew emscripten; see the full prerequisites below.
+x4prosim/wasm/build-deps.sh
+x4prosim/wasm/build.sh --web
+x4prosim/wasm/run-node.sh flash.bin sd.img       # headless, USB-CDC on stdout
+python3 x4prosim/wasm/serve.py build-wasm/web-dist
+# Open http://127.0.0.1:8000 and select your images.
+```
+
+The browser keeps writes in memory: download the SD image before closing the
+page. Wi-Fi is disabled in wasm. GitHub Pages uses the bundled service worker
+for COOP/COEP isolation and reloads once on first visit; localhost uses server
+headers. See [WebAssembly build details](X4PROSIM.md#webassembly-build) for
+prerequisites, Pages setup, tests and measured performance.
+
 ## What's emulated
 
 | Part | Model | Status |

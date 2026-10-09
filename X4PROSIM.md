@@ -89,6 +89,89 @@ Unmapped peripheral registers read as 0 and ignore writes (catch-all
 bit, an `ESP_ERR_INVALID_STATE`, or a timeout in the log. Map new devices with
 `memory_region_add_subregion_overlap(..., 1)` so they win over the catch-all.
 
+## WebAssembly build
+
+The wasm host uses Emscripten, pthreads, Asyncify and the TCI interpreter for
+both `qemu-system-riscv32.js` (X3) and `qemu-system-xtensa.js` (X4 Pro).
+Emscripten **6.0.12** is pinned in CI and matches the tested Homebrew compiler;
+Node **26** and current Chrome are tested. No firmware changes are needed.
+
+```sh
+# macOS prerequisites
+brew install emscripten ninja pkg-config autoconf automake libtool dosfstools mtools
+# Ubuntu prerequisites (also install/activate emsdk 6.0.12)
+sudo apt install build-essential autoconf automake libtool pkg-config ninja-build \
+  meson python3-venv texinfo gettext dosfstools mtools
+
+x4prosim/wasm/build-deps.sh             # pinned sources -> build-wasm-deps/sysroot
+x4prosim/wasm/build.sh --web            # both emulators + build-wasm/web-dist
+x4prosim/wasm/run-node.sh flash.bin sd.img
+python3 x4prosim/wasm/serve.py build-wasm/web-dist
+```
+
+Open `http://127.0.0.1:8000`, choose a 16 MiB flash image and optionally an SD
+image, or use `?flash=flash.bin&sd=sd.img` with copies in the served directory.
+The launcher reads bootloader byte 12: 5 selects X3, otherwise X4 Pro, with
+`-icount shift=0,sleep=on` / `shift=2,sleep=on` respectively. The browser shows
+the portrait SDL panel, CDC log, native keys and X4 Pro pointer/touch input.
+Reset resets the machine; Stop retains the SD in page memory for the next Start.
+Download SD image saves its writes; closing/reloading the page loses unsaved
+changes. The default card is a generated 64 MiB MBR/FAT32 image.
+
+Node mounts host files under `/host`; `run-node.sh` copies flash to `.run` but
+writes the supplied SD directly. Ctrl-a c selects the HMP monitor. Smoke tests
+copy both input images and leave logs, measurements and PPMs in
+`build-wasm/evidence/smoke`. HMP `quit` does not exit promptly in the wasm
+runtime; the smoke test terminates the process after capturing its evidence:
+
+```sh
+x4prosim/wasm/smoke.sh flash.bin sd.img  # X3 Home and X4 Pro blank-flash ROM
+x4prosim/wasm/smoke.sh --rom-only       # CI, no firmware required
+x4prosim/wasm/package-web.sh           # package existing binaries without rebuilding
+```
+
+`JOBS` sets build parallelism; `EM_CACHE` sets Emscripten's writable cache.
+To reuse dependencies in a fresh checkout, set `WASM_SYSROOT` to the absolute
+path of a complete `build-wasm-deps/sysroot` built with the same Emscripten
+version, for both `build-deps.sh` and `build.sh`. Installed packages are skipped;
+`FORCE=1` rebuilds them. Do not share a writable sysroot between concurrent
+builds. Sources and compiler caches are build artifacts, not repository files.
+
+CI adds a separate `wasm` job without changing the native matrix, caches the
+sysroot by dependency-script hash and emsdk version, runs the ROM-only smoke,
+and uploads `x4prosim-<version>-wasm`. Pages deploys only on pushes to `x4prosim`
+in `serialx/x4prosim`; PRs and other forks skip it. Enable **Settings > Pages >
+Source: GitHub Actions** in that repository and allow the `github-pages`
+environment to deploy that branch. Fork owners can change the repository guard
+if they deliberately enable their own Pages deployment.
+
+GitHub Pages cannot set COOP/COEP response headers. The vendored MIT-licensed
+[coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) supplies them
+and reloads once on first visit. It is bundled alongside `index.html`, with no
+runtime CDN requests. HTTPS (or localhost) and service workers are required.
+`serve.py` sets the headers directly; the worker does nothing when the page is
+already isolated. Browser automation instructions are in
+[x4prosim/wasm/web/README.txt](x4prosim/wasm/web/README.txt).
+
+Measured on an Apple M5 Max, 18 logical CPUs, 128 GiB RAM, using CrossPoint 1.6.5
+X3 and the supplied card (logically 1 GiB despite its small sparse allocation):
+
+| Host | Home milestone | Settled after first thumbnail build | Sampled peak memory |
+| --- | ---: | ---: | ---: |
+| Native reference | 5.08 s | 14.16 s | not sampled |
+| Node wasm | 17.14 s | 112.64 s | 525 MiB RSS |
+| Chrome wasm | 19.79 s | 145.46 s | 5.57 GiB aggregate RSS, including SD export |
+
+The milestone is the third completed `X3_DRF` refresh; screenshots and key
+checks wait for the subsequent `[MEM]` checkpoint. Chrome's cached-card run
+settled in 32.11 s. Peak sampled Chrome CPU was 184.7% (about 1.85 cores).
+The wasm modules are about 16.1 MiB (RISC-V) and 14.8 MiB (Xtensa).
+These are single-host observations, not a benchmark guarantee; large SD images
+and exports need full-size memory buffers. Wi-Fi is disabled. X4 Pro's ROM and
+portrait panel are verified with blank flash, but no X4 Pro firmware image was
+available to test its Home screen or touch response. Firefox/Safari and
+IndexedDB persistence are not verified/implemented.
+
 ## Where it stands (2026-10-08, 1007e firmware)
 
 Machine `-machine x4pro` (in `hw/xtensa/esp32s3.c`: `x4pro_board_init`) boots the

@@ -18,8 +18,14 @@ Byte 12 equal to 5 selects X3; other values select X4 Pro, matching run.sh.
 
 The server sets COOP and COEP for SharedArrayBuffer and pthreads. For a remote
 host use HTTPS and the same headers; plain HTTP works only on localhost. A
-service worker is unnecessary with these server headers. The server binds only
-to 127.0.0.1 by default.
+vendored coi-serviceworker 0.1.7 supplies isolation on hosts such as GitHub
+Pages that cannot set these headers, reloading once on first visit. It requires
+HTTPS or localhost and permission to register service workers. The local server
+binds only to 127.0.0.1 by default and needs no worker.
+
+coi-serviceworker.js is unchanged from gzuidhof/coi-serviceworker commit
+7b1d2a092d0d2dd2b7270b6f12f13605de26f214; its MIT license is included in
+coi-serviceworker.LICENSE.txt. No CDN is contacted at runtime.
 
 The Emscripten SDL2 port renders the device's portrait panel. The runtime runs
 QEMU main on a pthread; the page remains responsive. A small Emscripten-only guard yields in SDL event polling so queued browser
