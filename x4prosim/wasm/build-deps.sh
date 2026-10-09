@@ -4,6 +4,9 @@
 # Meson 1.5.0 + tomli in build-wasm-deps/venv. No Docker or changes to QEMU sources are required.
 # Run from any directory. FORCE=1 rebuilds all dependencies from cached sources.
 # Downloads (including Meson's PCRE2 fallback) survive rebuilds for offline use.
+# Fork crypto: native build-time generators; portable libgcrypt with asm and
+# jitter entropy disabled. Hide sys/random.h's unsupported getrandom API;
+# libgcrypt still uses Emscripten's supported getentropy for secure randomness.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -161,6 +164,41 @@ PYTHON
     sed -i.bak -E '/#define HAVE_POSIX_SPAWN 1/d; /#define HAVE_PTHREAD_GETNAME_NP 1/d' \
         "$BUILD/glib/_build/config.h"
     ninja -C "$BUILD/glib/_build" -j"$JOBS" install
+fi
+
+# The ESP AES/RSA device models require libgcrypt even without network crypto.
+# Use portable C MPI/ciphers and disable jitter entropy (CPU timing/assembly).
+# Skip libgcrypt's tests via SUBDIRS; it has no --disable-tests option.
+if needed gpg-error; then
+    fetch libgpg-error-1.50.tar.bz2 \
+        https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.50.tar.bz2 \
+        69405349e0a633e444a28c5b35ce8f14484684518a508dc48a089992fe93e20a
+    extract libgpg-error-1.50.tar.bz2 libgpg-error
+    (
+        cd "$BUILD/libgpg-error"
+        # Header generators must access source files on the native filesystem.
+        CC_FOR_BUILD=cc emconfigure ./configure --host=wasm32-unknown-linux \
+            --prefix="$SYSROOT" --enable-static --disable-shared \
+            --disable-nls --disable-doc --disable-tests --disable-languages \
+            --disable-dependency-tracking
+        emmake make -j"$JOBS" install
+    )
+fi
+
+if needed libgcrypt; then
+    fetch libgcrypt-1.11.0.tar.bz2 \
+        https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.0.tar.bz2 \
+        09120c9867ce7f2081d6aaa1775386b98c2f2f246135761aae47d81f58685b9c
+    extract libgcrypt-1.11.0.tar.bz2 libgcrypt
+    (
+        cd "$BUILD/libgcrypt"
+        # The cipher-table generator also writes files on the native host.
+        CC_FOR_BUILD=cc ac_cv_header_sys_random_h=no emconfigure ./configure --host=wasm32-unknown-linux \
+            --prefix="$SYSROOT" --enable-static --disable-shared \
+            --with-libgpg-error-prefix="$SYSROOT" --disable-asm \
+            --disable-jent-support --disable-doc --disable-dependency-tracking
+        emmake make -j"$JOBS" install SUBDIRS='compat mpi cipher random src'
+    )
 fi
 
 echo "Wasm dependency sysroot ready: $SYSROOT"
