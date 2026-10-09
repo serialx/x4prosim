@@ -960,7 +960,7 @@ static void sd_reset(DeviceState *dev)
 
 static bool sd_get_inserted(SDState *sd)
 {
-    return sd->blk && blk_is_inserted(sd->blk);
+    return sd->blk && blk_is_inserted_main_loop(sd->blk);
 }
 
 static bool sd_get_readonly(SDState *sd)
@@ -2494,7 +2494,7 @@ static size_t sd_do_command(SDState *sd, SDRequest *req,
     sd_rsp_type_t rtype;
     int rsplen;
 
-    if (!sd->blk || !blk_is_inserted(sd->blk)) {
+    if (!sd_get_inserted(sd)) {
         return 0;
     }
 
@@ -2666,7 +2666,7 @@ static size_t sd_write_data(SDState *sd, const void *buf, size_t length)
     int i;
     const uint8_t *value = buf;
 
-    if (!sd->blk || !blk_is_inserted(sd->blk)) {
+    if (!sd_get_inserted(sd)) {
         return length;
     }
 
@@ -2814,7 +2814,7 @@ static size_t sd_read_data(SDState *sd, void *buf, size_t length)
     uint32_t io_len;
     uint8_t *value = buf;
 
-    if (!sd->blk || !blk_is_inserted(sd->blk)) {
+    if (!sd_get_inserted(sd)) {
         memset(buf, dummy_byte, length);
         return length;
     }

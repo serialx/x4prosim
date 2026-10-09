@@ -2270,6 +2270,40 @@ bool coroutine_fn blk_co_is_inserted(BlockBackend *blk)
     return bs && bdrv_co_is_inserted(bs);
 }
 
+/* Negative means a driver callback must be polled in coroutine context. */
+static int GRAPH_RDLOCK blk_check_inserted(BlockDriverState *bs)
+{
+    BdrvChild *child;
+
+    if (!bs || !bs->drv) {
+        return 0;
+    }
+    if (bs->drv->bdrv_co_is_inserted) {
+        return -1;
+    }
+    QLIST_FOREACH(child, &bs->children, next) {
+        int ret = blk_check_inserted(child->bs);
+
+        if (ret <= 0) {
+            return ret;
+        }
+    }
+    return 1;
+}
+
+bool blk_is_inserted_main_loop(BlockBackend *blk)
+{
+    int ret;
+
+    GLOBAL_STATE_CODE();
+    bdrv_graph_rdlock_main_loop();
+    ret = blk_check_inserted(blk_bs(blk));
+    bdrv_graph_rdunlock_main_loop();
+
+    /* Physical media can change without a change_media_cb notification. */
+    return ret < 0 ? blk_is_inserted(blk) : ret;
+}
+
 bool coroutine_fn blk_co_is_available(BlockBackend *blk)
 {
     IO_CODE();

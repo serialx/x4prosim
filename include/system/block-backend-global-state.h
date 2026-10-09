@@ -74,6 +74,9 @@ BlockBackend *blk_by_dev(void *dev);
 BlockBackend *blk_by_qdev_id(const char *id, Error **errp);
 void blk_set_dev_ops(BlockBackend *blk, const BlockDevOps *ops, void *opaque);
 
+/* Check ordinary image graphs without entering a coroutine. */
+bool no_coroutine_fn blk_is_inserted_main_loop(BlockBackend *blk);
+
 int blk_make_zero(BlockBackend *blk, BdrvRequestFlags flags);
 void blk_aio_cancel(BlockAIOCB *acb);
 int blk_commit_all(void);
