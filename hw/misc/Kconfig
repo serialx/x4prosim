@@ -1,3 +1,15 @@
+config CW2017
+    bool
+    depends on I2C
+
+config BQ27220
+    bool
+    depends on I2C
+
+config QMI8658
+    bool
+    depends on I2C
+
 config APPLESMC
     bool
     depends on ISA_BUS
