@@ -183,6 +183,9 @@ macfb_sense_read(uint32_t value) "video sense: 0x%"PRIx32
 macfb_sense_write(uint32_t value) "video sense: 0x%"PRIx32
 macfb_update_mode(uint32_t width, uint32_t height, uint8_t depth) "setting mode to width %"PRId32 " height %"PRId32 " size %d"
 
+# uc8279.c
+uc8279_refresh(int vcom_frames, int ww_frames, int bw_frames, int wb_frames, int bb_frames, uint8_t pll, uint64_t busy_ms) "frames vcom=%d ww=%d bw=%d wb=%d bb=%d pll=0x%02x busy_ms=%" PRIu64
+
 # dm163.c
 dm163_redraw(uint8_t redraw) "0x%02x"
 dm163_dck(unsigned new_state) "dck : %u"
@@ -226,3 +229,6 @@ apple_gfx_iosfc_unmap_memory(void *a, void *b, void *c, void *d, void *e, void *
 apple_gfx_iosfc_unmap_memory_region(void* mem, void *region) "unmapping @ %p from memory region %p"
 apple_gfx_iosfc_raise_irq(uint32_t vector) "vector=0x%x"
 
+
+# UC8279/UC8253 complete RAM-plane transfer (command to final byte)
+uc8279_plane_write(uint8_t cmd, uint32_t bytes, int64_t ns) "cmd=0x%02x bytes=%u duration_ns=%" PRId64 ""

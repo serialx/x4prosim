@@ -1,6 +1,22 @@
 /*
  * SSI to SD card adapter.
  *
+ * Optional uint32 QOM latencies, in microseconds (all default to zero):
+ * read-repeat-us / read-seq-access-us / read-access-us delay the first CMD17/18
+ * token from R1 for repeated, sequential and random starts, respectively.
+ * read-next-us delays subsequent CMD18 tokens from the preceding block CRC.
+ * CMD24 busy after its data response uses write-repeat-busy-us, write-busy-us
+ * or write-random-busy-us for those patterns; CMD25 uses write-block-busy-us.
+ * STOP_TRAN busy is max(0, write-stop-busy-us + random_extra - decrement * n),
+ * where n is the completed CMD25 block count, decrement is
+ * write-stop-decrement-us and random_extra is write-stop-random-extra-us for
+ * random starts (zero otherwise). Clamp the result to UINT32_MAX microseconds.
+ * Repeated means the previous command's start sector; it takes precedence over
+ * sequential, the sector after the last completed block in the same direction.
+ * Deadlines use QEMU_CLOCK_VIRTUAL: polling returns 0xff before a read token,
+ * or 0x00 during write busy, without sleeping on the host. Boards can select
+ * defaults; override them with -global ssi-sd.<property>=<microseconds>.
+ *
  * Copyright (c) 2007-2009 CodeSourcery.
  * Written by Paul Brook
  *
@@ -17,11 +33,14 @@
 
 #include "qemu/osdep.h"
 #include "hw/ssi/ssi.h"
+#include "hw/core/qdev-properties.h"
 #include "migration/vmstate.h"
 #include "hw/sd/sd.h"
 #include "qemu/bswap.h"
 #include "qemu/crc-ccitt.h"
 #include "qom/object.h"
+#include "qemu/timer.h"
+#include "trace.h"
 
 //#define DEBUG_SSI_SD 1
 
@@ -61,6 +80,33 @@ struct ssi_sd_state {
     int32_t arglen;
     int32_t response_pos;
     int32_t stopping;
+    bool idle;          /* R1 idle bit of the last status, for R3/R7 */
+    uint32_t read_access_us;
+    uint32_t read_seq_access_us;
+    uint32_t read_repeat_us;
+    uint32_t read_next_us;
+    uint32_t write_busy_us;
+    uint32_t write_random_busy_us;
+    uint32_t write_repeat_busy_us;
+    uint32_t write_block_busy_us;
+    uint32_t write_stop_busy_us;
+    int32_t write_stop_decrement_us;
+    uint32_t write_stop_random_extra_us;
+    int64_t read_deadline_ns;
+    int64_t busy_deadline_ns;
+    uint64_t sector;
+    uint64_t next_read_sector;
+    uint64_t next_write_sector;
+    uint64_t last_read_start;
+    uint64_t last_write_start;
+    uint64_t write_start;
+    uint32_t write_blocks;
+    bool read_history;
+    bool write_history;
+    bool high_capacity;
+    bool random_write;
+    bool repeat_write;
+    bool write_response;
     SDBus sdbus;
 };
 
@@ -80,6 +126,15 @@ OBJECT_DECLARE_SIMPLE_TYPE(ssi_sd_state, SSI_SD)
 /* data accepted */
 #define DATA_RESPONSE_ACCEPTED  0x05
 
+static int64_t ssi_sd_deadline(ssi_sd_state *s, const char *kind, uint32_t us)
+{
+    int64_t deadline = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                       (int64_t)us * 1000;
+
+    trace_ssi_sd_latency(s->sector, kind, us, deadline);
+    return deadline;
+}
+
 static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
 {
     ssi_sd_state *s = SSI_SD(dev);
@@ -88,6 +143,10 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
 
     if (!sdbus_get_inserted(&s->sdbus)) {
         return SSI_DUMMY;
+    }
+
+    if (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) < s->busy_deadline_ns) {
+        return 0x00;
     }
 
     /*
@@ -112,6 +171,7 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
         }
     }
 
+dispatch:
     switch (s->mode) {
     case SSI_SD_CMD:
         switch (val) {
@@ -143,6 +203,23 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
                 s->response[0] = SSI_DUMMY;
             }
 
+            if (s->cmd == 25) {
+                uint64_t busy_us = s->write_stop_busy_us;
+                int64_t credit_us = (int64_t)s->write_stop_decrement_us *
+                                    s->write_blocks;
+
+                if (s->random_write) {
+                    busy_us += s->write_stop_random_extra_us;
+                }
+                if (credit_us >= 0) {
+                    busy_us -= MIN(busy_us, credit_us);
+                } else {
+                    /* Negative decrement models growth with burst length. */
+                    busy_us += MIN((uint64_t)-credit_us, UINT32_MAX);
+                }
+                s->busy_deadline_ns = ssi_sd_deadline(s, "write-stop",
+                                                     MIN(busy_us, UINT32_MAX));
+            }
             return SSI_DUMMY;
         }
 
@@ -155,11 +232,38 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
             /* FIXME: Check CRC.  */
             request.cmd = s->cmd;
             request.arg = ldl_be_p(s->cmdarg);
+            s->read_deadline_ns = 0;
+            if (s->cmd == 0) {
+                s->read_history = false;
+                s->write_history = false;
+                s->high_capacity = false;
+                s->busy_deadline_ns = 0;
+                s->write_response = false;
+            }
             s->arglen = sdbus_do_command(&s->sdbus, &request,
                                          longresp, sizeof(longresp));
             DPRINTF("CMD%d arg 0x%08x = %d\n", s->cmd, request.arg, s->arglen);
             assert(s->arglen > 0);
             memcpy(s->response, longresp, s->arglen);
+            /* The SD core supplies SPI R1/R2/R3/R7, including the idle bit. */
+            s->idle = (s->response[0] & 1) != 0;
+            if (s->cmd == 58 && s->arglen == 5) {
+                s->high_capacity = (ldl_be_p(&longresp[1]) & BIT(30)) != 0;
+            }
+            if (s->response[0] == 0 &&
+                (s->cmd == 17 || s->cmd == 18 ||
+                 s->cmd == 24 || s->cmd == 25)) {
+                s->sector = s->high_capacity ? request.arg : request.arg / 512;
+                if (s->cmd == 24 || s->cmd == 25) {
+                    s->repeat_write = s->write_history &&
+                                      s->sector == s->last_write_start;
+                    s->random_write = !s->repeat_write &&
+                        (!s->write_history ||
+                         s->sector != s->next_write_sector);
+                    s->write_start = s->sector;
+                    s->write_blocks = 0;
+                }
+            }
 
             /* handle R1b (busy signal) */
             if (s->cmd == 28 || s->cmd == 29 || s->cmd == 38) {
@@ -178,6 +282,36 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
     case SSI_SD_RESPONSE:
         if (s->response_pos < s->arglen) {
             DPRINTF("Response 0x%02x\n", s->response[s->response_pos]);
+            if (s->write_response) {
+                s->write_response = false;
+                s->busy_deadline_ns = ssi_sd_deadline(s,
+                    s->cmd == 25 ? "write-block" :
+                    s->repeat_write ? "write-repeat" :
+                    s->random_write ? "write-random" : "write",
+                    s->cmd == 25 ? s->write_block_busy_us :
+                    s->repeat_write ? s->write_repeat_busy_us :
+                    s->random_write ? s->write_random_busy_us :
+                                      s->write_busy_us);
+                s->next_write_sector = ++s->sector;
+                s->last_write_start = s->write_start;
+                if (s->write_blocks < UINT32_MAX) {
+                    s->write_blocks++;
+                }
+                s->write_history = true;
+            } else if (s->response_pos == 0 && s->response[0] == 0 &&
+                       (s->cmd == 17 || s->cmd == 18)) {
+                bool sequential = s->read_history &&
+                                  s->sector == s->next_read_sector;
+                bool repeated = s->read_history &&
+                                s->sector == s->last_read_start;
+
+                s->read_deadline_ns = ssi_sd_deadline(s,
+                    repeated ? "read-repeat" :
+                    sequential ? "read-seq-access" : "read-access",
+                    repeated ? s->read_repeat_us :
+                    sequential ? s->read_seq_access_us : s->read_access_us);
+                s->last_read_start = s->sector;
+            }
             return s->response[s->response_pos++];
         }
         if (s->stopping) {
@@ -188,16 +322,24 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
         if (sdbus_data_ready(&s->sdbus)) {
             DPRINTF("Data read\n");
             s->mode = SSI_SD_DATA_START;
-        } else {
-            DPRINTF("End of command\n");
-            s->mode = SSI_SD_CMD;
+            return SSI_DUMMY;
         }
-        return SSI_DUMMY;
+        DPRINTF("End of command\n");
+        s->mode = SSI_SD_CMD;
+        /*
+         * x4prosim: this byte already belongs to the host's next transfer. A
+         * write's data token may follow the R1 response without a fill byte
+         * (SdFat does that), so take it as a command/token, not as a dummy.
+         */
+        goto dispatch;
     case SSI_SD_PREP_DATA:
         DPRINTF("Prepare data block (Nac)\n");
         s->mode = SSI_SD_DATA_START;
         return SSI_DUMMY;
     case SSI_SD_DATA_START:
+        if (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) < s->read_deadline_ns) {
+            return SSI_DUMMY;
+        }
         DPRINTF("Start read block\n");
         s->mode = SSI_SD_DATA_READ;
         s->response_pos = 0;
@@ -217,6 +359,14 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
         s->response_pos++;
         if (s->response_pos == 2) {
             DPRINTF("CRC16 read end\n");
+            if (s->read_bytes == 512 && (s->cmd == 17 || s->cmd == 18)) {
+                s->next_read_sector = ++s->sector;
+                s->read_history = true;
+                if (s->cmd == 18) {
+                    s->read_deadline_ns = ssi_sd_deadline(s, "read-next",
+                                                         s->read_next_us);
+                }
+            }
             if (s->read_bytes == 512 && s->cmd != 17) {
                 s->mode = SSI_SD_PREP_DATA;
             } else {
@@ -244,6 +394,7 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
             s->write_bytes = 0;
             s->arglen = 1;
             s->response[0] = DATA_RESPONSE_ACCEPTED;
+            s->write_response = s->cmd == 24 || s->cmd == 25;
             s->response_pos = 0;
         }
         return SSI_DUMMY;
@@ -272,6 +423,43 @@ static int ssi_sd_post_load(void *opaque, int version_id)
     return 0;
 }
 
+static bool ssi_sd_timing_needed(void *opaque)
+{
+    ssi_sd_state *s = opaque;
+
+    return s->read_access_us || s->read_seq_access_us || s->read_repeat_us ||
+           s->read_next_us || s->write_busy_us || s->write_random_busy_us ||
+           s->write_repeat_busy_us || s->write_block_busy_us ||
+           s->write_stop_busy_us || s->write_stop_decrement_us ||
+           s->write_stop_random_extra_us;
+}
+
+static const VMStateDescription vmstate_ssi_sd_timing = {
+    .name = "ssi_sd/timing",
+    .version_id = 2,
+    .minimum_version_id = 1,
+    .needed = ssi_sd_timing_needed,
+    .fields = (const VMStateField []) {
+        VMSTATE_INT64(read_deadline_ns, ssi_sd_state),
+        VMSTATE_INT64(busy_deadline_ns, ssi_sd_state),
+        VMSTATE_UINT64(sector, ssi_sd_state),
+        VMSTATE_UINT64(next_read_sector, ssi_sd_state),
+        VMSTATE_UINT64(next_write_sector, ssi_sd_state),
+        VMSTATE_BOOL(read_history, ssi_sd_state),
+        VMSTATE_BOOL(write_history, ssi_sd_state),
+        VMSTATE_BOOL(high_capacity, ssi_sd_state),
+        VMSTATE_BOOL(random_write, ssi_sd_state),
+        VMSTATE_BOOL(write_response, ssi_sd_state),
+        VMSTATE_BOOL(idle, ssi_sd_state),
+        VMSTATE_UINT64_V(last_read_start, ssi_sd_state, 2),
+        VMSTATE_UINT64_V(last_write_start, ssi_sd_state, 2),
+        VMSTATE_UINT64_V(write_start, ssi_sd_state, 2),
+        VMSTATE_UINT32_V(write_blocks, ssi_sd_state, 2),
+        VMSTATE_BOOL_V(repeat_write, ssi_sd_state, 2),
+        VMSTATE_END_OF_LIST()
+    },
+};
+
 static const VMStateDescription vmstate_ssi_sd = {
     .name = "ssi_sd",
     .version_id = 7,
@@ -290,7 +478,11 @@ static const VMStateDescription vmstate_ssi_sd = {
         VMSTATE_INT32(stopping, ssi_sd_state),
         VMSTATE_SSI_PERIPHERAL(ssidev, ssi_sd_state),
         VMSTATE_END_OF_LIST()
-    }
+    },
+    .subsections = (const VMStateDescription * const []) {
+        &vmstate_ssi_sd_timing,
+        NULL
+    },
 };
 
 static void ssi_sd_realize(SSIPeripheral *d, Error **errp)
@@ -314,7 +506,44 @@ static void ssi_sd_reset(DeviceState *dev)
     s->arglen = 0;
     s->response_pos = 0;
     s->stopping = 0;
+    s->idle = true;
+    s->read_deadline_ns = 0;
+    s->busy_deadline_ns = 0;
+    s->sector = 0;
+    s->next_read_sector = 0;
+    s->next_write_sector = 0;
+    s->last_read_start = 0;
+    s->last_write_start = 0;
+    s->write_start = 0;
+    s->write_blocks = 0;
+    s->read_history = false;
+    s->write_history = false;
+    s->high_capacity = false;
+    s->random_write = false;
+    s->repeat_write = false;
+    s->write_response = false;
 }
+
+static const Property ssi_sd_properties[] = {
+    DEFINE_PROP_UINT32("read-access-us", ssi_sd_state, read_access_us, 0),
+    DEFINE_PROP_UINT32("read-seq-access-us", ssi_sd_state,
+                       read_seq_access_us, 0),
+    DEFINE_PROP_UINT32("read-next-us", ssi_sd_state, read_next_us, 0),
+    DEFINE_PROP_UINT32("read-repeat-us", ssi_sd_state, read_repeat_us, 0),
+    DEFINE_PROP_UINT32("write-busy-us", ssi_sd_state, write_busy_us, 0),
+    DEFINE_PROP_UINT32("write-random-busy-us", ssi_sd_state,
+                       write_random_busy_us, 0),
+    DEFINE_PROP_UINT32("write-stop-busy-us", ssi_sd_state,
+                       write_stop_busy_us, 0),
+    DEFINE_PROP_UINT32("write-repeat-busy-us", ssi_sd_state,
+                       write_repeat_busy_us, 0),
+    DEFINE_PROP_UINT32("write-block-busy-us", ssi_sd_state,
+                       write_block_busy_us, 0),
+    DEFINE_PROP_INT32("write-stop-decrement-us", ssi_sd_state,
+                       write_stop_decrement_us, 0),
+    DEFINE_PROP_UINT32("write-stop-random-extra-us", ssi_sd_state,
+                       write_stop_random_extra_us, 0),
+};
 
 static void ssi_sd_class_init(ObjectClass *klass, const void *data)
 {
@@ -325,6 +554,7 @@ static void ssi_sd_class_init(ObjectClass *klass, const void *data)
     k->transfer = ssi_sd_transfer;
     k->cs_polarity = SSI_CS_LOW;
     dc->vmsd = &vmstate_ssi_sd;
+    device_class_set_props(dc, ssi_sd_properties);
     device_class_set_legacy_reset(dc, ssi_sd_reset);
     /* Reason: GPIO chip-select line should be wired up */
     dc->user_creatable = false;
