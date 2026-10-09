@@ -776,7 +776,7 @@ static inline bool icount_exit_request(CPUState *cpu)
     if (cpu->cflags_next_tb != -1 && !(cpu->cflags_next_tb & CF_USE_ICOUNT)) {
         return false;
     }
-    return cpu->neg.icount_decr.u16.low + cpu->icount_extra == 0;
+    return cpu->neg.icount_decr.u16.low + cpu->icount_extra <= 0;
 }
 
 static inline bool cpu_handle_interrupt(CPUState *cpu,
@@ -920,11 +920,18 @@ static inline void cpu_loop_exec_tb(CPUState *cpu, TranslationBlock *tb,
     cpu->icount_extra = cpu->icount_budget - insns_left;
 
     /*
-     * If the next tb has more instructions than we have left to
-     * execute we need to ensure we find/generate a TB with exactly
-     * insns_left instructions in it.
+     * If the next TB costs more ticks than remain, find the number of
+     * whole instructions that fit. CF_COUNT_MASK always counts guest
+     * instructions, even when icount_decr counts weighted time ticks.
      */
-    if (insns_left > 0 && insns_left < tb->icount)  {
+    if (insns_left > 0 && insns_left < tb->icount_cost) {
+        insns_left = tb_insns_for_ticks(tb, insns_left);
+        if (insns_left == 0) {
+            /* Complete one atomic instruction, then service the deadline. */
+            cpu->cflags_next_tb = (tb->cflags & ~CF_COUNT_MASK) |
+                CF_NOIRQ | CF_NO_GOTO_TB | CF_NO_GOTO_PTR | 1;
+            return;
+        }
         assert(insns_left <= CF_COUNT_MASK);
         assert(cpu->icount_extra == 0);
         cpu->cflags_next_tb = (tb->cflags & ~CF_COUNT_MASK) | insns_left;

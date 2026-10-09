@@ -94,7 +94,8 @@ struct TranslationBlock {
 
     /* size of target code for this block (1 <= size <= TARGET_PAGE_SIZE) */
     uint16_t size;
-    uint16_t icount;
+    uint16_t icount; /* Guest instructions, including CF_COUNT_MASK budgets. */
+    uint16_t icount_cost; /* Virtual-time ticks, independent of icount. */
 
     struct tb_tc tc;
 

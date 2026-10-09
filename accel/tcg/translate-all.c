@@ -85,17 +85,18 @@ static int64_t decode_sleb128(const uint8_t **pp)
     return val;
 }
 
-/* Encode the data collected about the instructions while compiling TB.
-   Place the data at BLOCK, and return the number of bytes consumed.
-
-   The logical table consists of INSN_START_WORDS uint64_t's,
-   which come from the target's insn_start data, followed by a uintptr_t
-   which comes from the host pc of the end of the code implementing the insn.
-
-   Each line of the table is encoded as sleb128 deltas from the previous
-   line.  The seed for the first line is { tb->pc, 0..., tb->tc.ptr }.
-   That is, the first column is seeded with the guest pc, the last column
-   with the host pc, and the middle columns with zeros.  */
+/*
+ * Encode the data collected about the instructions while compiling a TB.
+ * Place the data at BLOCK, and return the number of bytes consumed.
+ *
+ * Each row consists of INSN_START_WORDS uint64_t values from the
+ * target's insn_start data, the host PC offset at the end of the instruction,
+ * and its positive virtual-time tick cost.
+ *
+ * The cost is encoded directly as sleb128; other columns are sleb128 deltas
+ * from the previous row. The first row seeds the guest PC column with tb->pc,
+ * the host PC column with tb->tc.ptr, and other delta columns with zero.
+ */
 
 static int encode_search(TranslationBlock *tb, uint8_t *block)
 {
@@ -120,6 +121,7 @@ static int encode_search(TranslationBlock *tb, uint8_t *block)
         prev = (i == 0 ? 0 : insn_end_off[i - 1]);
         curr = insn_end_off[i];
         p = encode_sleb128(p, curr - prev);
+        p = encode_sleb128(p, tcg_ctx->gen_insn_cost[i]);
 
         /* Test for (pending) buffer overflow.  The assumption is that any
            one row beginning below the high water mark cannot overrun
@@ -133,12 +135,33 @@ static int encode_search(TranslationBlock *tb, uint8_t *block)
     return p - block;
 }
 
+/* Convert a remaining tick budget to an instruction-count limit. */
+unsigned tb_insns_for_ticks(const TranslationBlock *tb, unsigned ticks)
+{
+    const uint8_t *p = tb->tc.ptr + tb->tc.size;
+    unsigned i;
+
+    for (i = 0; i < tb->icount; i++) {
+        for (int j = 0; j < INSN_START_WORDS + 1; j++) {
+            decode_sleb128(&p);
+        }
+        unsigned cost = decode_sleb128(&p);
+        if (cost > ticks) {
+            break;
+        }
+        ticks -= cost;
+    }
+    return i;
+}
+
 static int cpu_unwind_data_from_tb(TranslationBlock *tb, uintptr_t host_pc,
-                                   uint64_t *data)
+                                   uint64_t *data, int *cost_left)
 {
     uintptr_t iter_pc = (uintptr_t)tb->tc.ptr;
     const uint8_t *p = tb->tc.ptr + tb->tc.size;
     int i, j, num_insns = tb->icount;
+
+    int remaining = tb->icount_cost;
 
     host_pc -= GETPC_ADJ;
 
@@ -160,9 +183,14 @@ static int cpu_unwind_data_from_tb(TranslationBlock *tb, uintptr_t host_pc,
             data[j] += decode_sleb128(&p);
         }
         iter_pc += decode_sleb128(&p);
+        int cost = decode_sleb128(&p);
         if (iter_pc > host_pc) {
+            if (cost_left) {
+                *cost_left = remaining;
+            }
             return num_insns - i;
         }
+        remaining -= cost;
     }
     return -1;
 }
@@ -175,7 +203,8 @@ void cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
                                uintptr_t host_pc)
 {
     uint64_t data[INSN_START_WORDS];
-    int insns_left = cpu_unwind_data_from_tb(tb, host_pc, data);
+    int cost_left;
+    int insns_left = cpu_unwind_data_from_tb(tb, host_pc, data, &cost_left);
 
     if (insns_left < 0) {
         return;
@@ -184,10 +213,15 @@ void cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     if (tb_cflags(tb) & CF_USE_ICOUNT) {
         assert(icount_enabled());
         /*
-         * Reset the cycle counter to the start of the block and
-         * shift if to the number of actually executed instructions.
+         * Refund the time charged for the faulting instruction and the
+         * rest of the block; prior instructions keep their weighted cost.
          */
-        cpu->neg.icount_decr.u16.low += insns_left;
+        unsigned refunded = cpu->neg.icount_decr.u16.low + cost_left;
+        cpu->neg.icount_decr.u16.low = refunded;
+        if (refunded > UINT16_MAX) {
+            /* Undo the borrow from an uninterruptible single-insn TB. */
+            cpu->icount_extra += UINT16_MAX + 1;
+        }
     }
 
     cpu->cc->tcg_ops->restore_state_to_opc(cpu, tb, data);
@@ -220,7 +254,7 @@ bool cpu_unwind_state_data(CPUState *cpu, uintptr_t host_pc, uint64_t *data)
     if (in_code_gen_buffer((const void *)(host_pc - tcg_splitwx_diff))) {
         TranslationBlock *tb = tcg_tb_lookup(host_pc);
         if (tb) {
-            return cpu_unwind_data_from_tb(tb, host_pc, data) >= 0;
+            return cpu_unwind_data_from_tb(tb, host_pc, data, NULL) >= 0;
         }
     }
     return false;

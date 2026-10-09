@@ -11,6 +11,9 @@
 
 #include "exec/translation-block.h"
 
+/* Convert a virtual-time tick budget to a whole guest-instruction limit. */
+unsigned tb_insns_for_ticks(const TranslationBlock *tb, unsigned ticks);
+
 /*
  * The true return address will often point to a host insn that is part of
  * the next translated guest insn.  Adjust the address backward to point to

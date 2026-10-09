@@ -58,6 +58,7 @@ typedef enum DisasJumpType {
  * @is_jmp: What instruction to disassemble next.
  * @num_insns: Number of translated instructions (including current).
  * @max_insns: Maximum number of instructions to be translated in this TB.
+ * @icount_cost: Total virtual-time tick cost of translated instructions.
  * @plugin_enabled: TCG plugin enabled in this TB.
  * @fake_insn: True if translator_fake_ldb used.
  * @insn_start: The last op emitted by the insn_start hook,
@@ -72,6 +73,7 @@ struct DisasContextBase {
     DisasJumpType is_jmp;
     int num_insns;
     int max_insns;
+    unsigned icount_cost;
     bool plugin_enabled;
     bool fake_insn;
     uint8_t code_mmuidx;
@@ -109,6 +111,11 @@ struct DisasContextBase {
  *      of the following instruction.  Set db->is_jmp as necessary to
  *      terminate the main loop.
  *
+ * @insn_cost:
+ *      Optional positive tick cost of the instruction just translated;
+ *      defaults to one. The target must bound the TB's total cost to
+ *      UINT16_MAX.
+ *
  * @tb_stop:
  *      Emit any opcodes required to exit the TB, based on db->is_jmp.
  *
@@ -120,6 +127,7 @@ typedef struct TranslatorOps {
     void (*tb_start)(DisasContextBase *db, CPUState *cpu);
     void (*insn_start)(DisasContextBase *db, CPUState *cpu);
     void (*translate_insn)(DisasContextBase *db, CPUState *cpu);
+    unsigned (*insn_cost)(DisasContextBase *db, CPUState *cpu);
     void (*tb_stop)(DisasContextBase *db, CPUState *cpu);
     bool (*disas_log)(const DisasContextBase *db, CPUState *cpu, FILE *f);
 } TranslatorOps;

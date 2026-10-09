@@ -1,6 +1,13 @@
 /*
  * Generic intermediate code generation.
  *
+ * insn_cost optionally charges virtual-time ticks instead of instructions.
+ * tb->icount and CF_COUNT_MASK remain instruction counts; icount_cost alone
+ * feeds icount_decr. Per-insn costs accompany the unwind table so exceptions
+ * and MMIO recompilation refund the unexecuted ticks. Targets must bound the
+ * TB length so its total cost fits the 16-bit decrementer. insn_start target
+ * parameters (including RISC-V fault metadata) retain their existing meaning.
+ *
  * Copyright (C) 2016-2017 Lluís Vilanova <vilanova@ac.upc.edu>
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or later.
@@ -52,11 +59,17 @@ static TCGOp *gen_tb_start(DisasContextBase *db, uint32_t cflags)
                        sizeof(CPUState));
     }
 
+    if ((cflags & (CF_USE_ICOUNT | CF_NOIRQ)) ==
+        (CF_USE_ICOUNT | CF_NOIRQ)) {
+        /* A one-insn deadline overrun ignores the asynchronous exit bits. */
+        tcg_gen_andi_i32(count, count, UINT16_MAX);
+    }
+
     if (cflags & CF_USE_ICOUNT) {
         /*
          * We emit a sub with a dummy immediate argument. Keep the insn index
-         * of the sub so that we later (when we know the actual insn count)
-         * can update the argument with the actual insn count.
+         * of the sub so that we later (when we know the actual tick cost)
+         * can update the argument with the actual tick cost.
          */
         tcg_gen_sub_i32(count, count, tcg_constant_i32(0));
         icount_start_insn = tcg_last_op();
@@ -65,15 +78,29 @@ static TCGOp *gen_tb_start(DisasContextBase *db, uint32_t cflags)
     /*
      * Emit the check against icount_decr.u32 to see if we should exit
      * unless we suppress the check with CF_NOIRQ. If we are using
-     * icount and have suppressed interruption the higher level code
-     * should have ensured we don't run more instructions than the
-     * budget.
+     * icount and suppress interruption, a one-instruction TB may overrun
+     * the timer budget; the signed extra counter records that borrow.
      */
     if (cflags & CF_NOIRQ) {
         tcg_ctx->exitreq_label = NULL;
     } else {
         tcg_ctx->exitreq_label = gen_new_label();
         tcg_gen_brcondi_i32(TCG_COND_LT, count, 0, tcg_ctx->exitreq_label);
+    }
+
+    if ((cflags & (CF_USE_ICOUNT | CF_NOIRQ)) ==
+        (CF_USE_ICOUNT | CF_NOIRQ)) {
+        TCGLabel *no_borrow = gen_new_label();
+        TCGv_i64 extra = tcg_temp_new_i64();
+
+        /* Keep low + extra signed when one atomic instruction overruns. */
+        tcg_gen_brcondi_i32(TCG_COND_GE, count, 0, no_borrow);
+        tcg_gen_ld_i64(extra, tcg_env,
+                      offsetof(CPUState, icount_extra) - sizeof(CPUState));
+        tcg_gen_subi_i64(extra, extra, UINT16_MAX + 1);
+        tcg_gen_st_i64(extra, tcg_env,
+                      offsetof(CPUState, icount_extra) - sizeof(CPUState));
+        gen_set_label(no_borrow);
     }
 
     if (cflags & CF_USE_ICOUNT) {
@@ -86,15 +113,14 @@ static TCGOp *gen_tb_start(DisasContextBase *db, uint32_t cflags)
 }
 
 static void gen_tb_end(const TranslationBlock *tb, uint32_t cflags,
-                       TCGOp *icount_start_insn, int num_insns)
+                       TCGOp *icount_start_insn, unsigned icount_cost)
 {
     if (cflags & CF_USE_ICOUNT) {
         /*
-         * Update the num_insn immediate parameter now that we know
-         * the actual insn count.
+         * Update the immediate parameter now that we know the tick cost.
          */
         tcg_set_insn_param(icount_start_insn, 2,
-                           tcgv_i32_arg(tcg_constant_i32(num_insns)));
+                           tcgv_i32_arg(tcg_constant_i32(icount_cost)));
     }
 
     if (tcg_ctx->exitreq_label) {
@@ -136,6 +162,7 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
     db->pc_next = pc;
     db->is_jmp = DISAS_NEXT;
     db->num_insns = 0;
+    db->icount_cost = 0;
     db->max_insns = *max_insns;
     db->insn_start = NULL;
     db->fake_insn = false;
@@ -176,6 +203,10 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
          * the next instruction.
          */
         ops->translate_insn(db, cpu);
+        unsigned cost = ops->insn_cost ? ops->insn_cost(db, cpu) : 1;
+        assert(cost > 0 && cost <= UINT16_MAX - db->icount_cost);
+        tcg_ctx->gen_insn_cost[db->num_insns - 1] = cost;
+        db->icount_cost += cost;
 
         /*
          * We can't instrument after instructions that change control
@@ -205,7 +236,7 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
 
     /* Emit code to exit the TB, as indicated by db->is_jmp.  */
     ops->tb_stop(db, cpu);
-    gen_tb_end(tb, cflags, icount_start_insn, db->num_insns);
+    gen_tb_end(tb, cflags, icount_start_insn, db->icount_cost);
 
     /*
      * Manage can_do_io for the translation block: set to false before
@@ -225,6 +256,7 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
     /* May be used by disas_log or plugin callbacks. */
     tb->size = db->pc_next - db->pc_first;
     tb->icount = db->num_insns;
+    tb->icount_cost = db->icount_cost;
 
     if (plugin_enabled) {
         plugin_gen_tb_end(cpu, db->num_insns);

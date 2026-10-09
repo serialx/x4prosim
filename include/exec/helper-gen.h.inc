@@ -98,6 +98,20 @@ static inline void glue(gen_helper_, name)(dh_retvar_decl(ret)          \
                   dh_arg(t7, 7));                                       \
 }
 
+#define DEF_HELPER_FLAGS_8(name, flags, ret, t1, t2, t3, t4, t5, t6, t7, t8)\
+extern TCGHelperInfo glue(helper_info_, name);                          \
+static inline void glue(gen_helper_, name)(dh_retvar_decl(ret)          \
+    dh_arg_decl(t1, 1), dh_arg_decl(t2, 2), dh_arg_decl(t3, 3),         \
+    dh_arg_decl(t4, 4), dh_arg_decl(t5, 5), dh_arg_decl(t6, 6),         \
+    dh_arg_decl(t7, 7), dh_arg_decl(t8, 8))                             \
+{                                                                       \
+    tcg_gen_call8(glue(helper_info_, name).func,                        \
+                  &glue(helper_info_, name), dh_retvar(ret),            \
+                  dh_arg(t1, 1), dh_arg(t2, 2), dh_arg(t3, 3),          \
+                  dh_arg(t4, 4), dh_arg(t5, 5), dh_arg(t6, 6),          \
+                  dh_arg(t7, 7), dh_arg(t8, 8));                        \
+}
+
 #include HELPER_H
 
 #undef DEF_HELPER_FLAGS_0
@@ -108,3 +122,4 @@ static inline void glue(gen_helper_, name)(dh_retvar_decl(ret)          \
 #undef DEF_HELPER_FLAGS_5
 #undef DEF_HELPER_FLAGS_6
 #undef DEF_HELPER_FLAGS_7
+#undef DEF_HELPER_FLAGS_8

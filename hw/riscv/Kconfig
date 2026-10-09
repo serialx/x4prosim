@@ -162,3 +162,20 @@ config K230
     select SERIAL_MM
     select UNIMP
     select K230_WDT
+
+config RISCV_ESP32C3
+    bool
+    default y
+    depends on RISCV32
+    select OPENCORES_ETH
+    select UNIMP
+    select SSI
+    select SSI_SD
+    select I2C
+
+config RISCV_ESP32C6
+    bool
+    default y
+    depends on RISCV32
+    select OPENCORES_ETH
+    select UNIMP
