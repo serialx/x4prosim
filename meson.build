@@ -3856,7 +3856,8 @@ if have_block
   if host_os == 'windows'
     system_ss.add(files('os-win32.c'))
   elif host_os == 'emscripten'
-    blockdev_ss.add(files('os-wasm.c'))
+    blockdev_ss.add(files('os-wasm.c'),
+                   declare_dependency(link_args: ['-Wl,--wrap=exit']))
   else
     blockdev_ss.add(files('os-posix.c'))
   endif

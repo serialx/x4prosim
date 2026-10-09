@@ -36,6 +36,23 @@
 #include "qemu/log.h"
 #include "system/runstate.h"
 #include "qemu/cutils.h"
+#include "qemu/main-loop.h"
+
+G_NORETURN void __real_exit(int status);
+G_NORETURN void __wrap_exit(int status);
+
+void __wrap_exit(int status)
+{
+    /*
+     * Emscripten runs atexit callbacks on the JavaScript thread. Release the
+     * caller's BQL before handing exit over to that thread, so QEMU's exit
+     * notifiers can acquire it there.
+     */
+    if (bql_locked()) {
+        bql_unlock();
+    }
+    __real_exit(status);
+}
 
 void os_setup_post(void){}
 void os_set_line_buffering(void)
