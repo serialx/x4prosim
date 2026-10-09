@@ -102,6 +102,170 @@ Unmapped peripheral registers read as 0 and ignore writes (catch-all
 bit, an `ESP_ERR_INVALID_STATE`, or a timeout in the log. Map new devices with
 `memory_region_add_subregion_overlap(..., 1)` so they win over the catch-all.
 
+## WebAssembly build
+
+The Emscripten build uses Kohei Tokunaga's **wasm64 TCG JIT backend**: cold
+translation blocks run through TCI, and hot blocks become Wasm modules at
+runtime. Both X3 (`qemu-system-riscv32.js`) and X4 Pro
+(`qemu-system-xtensa.js`) are built. This replaces the older QEMU 9.2.2 TCI
+port on `serialx/wasm`; firmware images need no changes.
+
+### Build and choose an address mode
+
+Use Emscripten **6.0.12** (also pinned in CI), Python 3.9+ and Node **26**.
+The local verification used Homebrew Emscripten 6.0.12 and Node 26.11.0 on
+macOS arm64. On Linux, install and activate emsdk 6.0.12 before building.
+
+```sh
+# macOS prerequisites
+brew install emscripten ninja pkg-config autoconf automake libtool dosfstools mtools
+# Ubuntu prerequisites (plus activated emsdk 6.0.12)
+sudo apt install build-essential autoconf automake libtool pkg-config ninja-build \
+  meson python3-venv texinfo gettext dosfstools mtools
+
+x4prosim/wasm/build-deps.sh          # build-wasm-deps/sysroot-wasm64
+x4prosim/wasm/build.sh --web         # default: build-wasm-32limit/web-dist
+x4prosim/wasm/run-node.sh flash.bin sd.img
+python3 x4prosim/wasm/serve.py build-wasm-32limit/web-dist
+```
+
+Both modes use 64-bit host pointers and the same wasm64 dependency sysroot.
+The mode controls the emitted Wasm memory addressing, not the guest CPU:
+
+| Selection | Emscripten setting | Output directory | Browser requirement |
+| --- | --- | --- | --- |
+| `WASM64_MODE=32` (default) | `MEMORY64=2`, 32-bit address limit | `build-wasm-32limit/` | No Memory64 required; compatible with modern Chrome, Firefox and Safari |
+| `WASM64_MODE=64` | `MEMORY64=1`, native Memory64 | `build-wasm/` | Chrome 133+, Firefox 134+; not Safari |
+
+Memory64 support is tracked in [MDN's compatibility data](https://github.com/mdn/browser-compat-data/blob/main/webassembly/memory64.json).
+The default mode is the portable option across those browsers. Both modes
+still require Wasm threads, exception handling and cross-origin isolation.
+Actual emulator acceptance was run in **Chrome 155**, with GPU/WebGL enabled,
+and Node 26; Firefox and Safari have not been tested with this emulator.
+
+```sh
+# Native Memory64: keep the mode consistent for build, launch and packaging.
+WASM64_MODE=64 x4prosim/wasm/build.sh --web
+WASM64_MODE=64 x4prosim/wasm/run-node.sh flash.bin sd.img
+python3 x4prosim/wasm/serve.py build-wasm/web-dist
+```
+
+`JOBS` sets build parallelism; `EM_CACHE` selects a writable compiler cache.
+For a fresh checkout, export `WASM_SYSROOT=/absolute/path/to/sysroot-wasm64`
+before both build scripts to reuse dependencies built with the same compiler.
+Do not reuse the old TCI port's 32-bit sysroot. Installed dependencies are
+skipped; `FORCE=1` rebuilds them. Do not rebuild a shared sysroot concurrently.
+The scripts pin dependency sources and keep generated files in ignored build
+directories. QEMU configure can download missing Python packages/subprojects.
+
+### Run, package and verify
+
+Open `http://127.0.0.1:8000`, choose a 16 MiB flash image and optionally an SD
+image, or use `?flash=flash.bin&sd=sd.img` with copies in the served directory.
+Bootloader byte 12 equal to 5 selects X3; otherwise the launcher selects X4 Pro.
+The browser has a portrait SDL panel, CDC log, keys and X4 Pro pointer input.
+Reset resets the guest; Stop retains the SD in page memory for the next Start.
+Download SD image saves guest writes. Closing or reloading loses unsaved
+changes; flash changes are not exported. A blank 64 MiB FAT32 card is included.
+
+Node mounts host files under `/host`. `run-node.sh` copies flash into `.run`
+but writes the supplied SD directly, so use a copy when testing. Ctrl-a c
+selects the HMP monitor. Smoke tests copy both input images and save logs,
+measurements and PPM panel captures under `build-wasm/evidence/smoke`:
+
+```sh
+x4prosim/wasm/smoke.sh flash.bin sd.img  # X3 Home, JIT activity, X4 Pro ROM/panel
+x4prosim/wasm/smoke.sh --rom-only       # no firmware; used in CI
+x4prosim/wasm/package-web.sh           # package existing default-mode binaries
+```
+
+Use `WASM64_MODE=64` with smoke/packaging for the native Memory64 build.
+`WASM_JIT_STATS=1` on the Node launcher logs successfully instantiated TB
+modules. `REFERENCE_PPM=/absolute/path/to/native.ppm` makes smoke compare the
+X3 capture byte for byte. Browser automation and controls are documented in
+[x4prosim/wasm/web/README.txt](x4prosim/wasm/web/README.txt).
+
+The launchers use ordinary TCG blocks with a 64 MiB translation cache and
+`-icount shift=0,sleep=on` for X3 (`shift=2` for X4 Pro). The Wasm backend
+learns recurring MMIO boundaries to avoid repeated mid-block exits. Native
+Wasm longjmp and fixed 256 MiB linear memory reduce runtime overhead.
+For larger workloads, rebuild with `WASM_INITIAL_MEMORY=<bytes>` or
+`WASM_MEMORY_GROWTH=1`; growth can cost performance. `WASM_ACCEL` overrides
+the Node accelerator setting; `ICOUNT_SLEEP=off` disables idle-time warping
+for deterministic timing comparisons. The production default stays `on`.
+
+### CI and hosting
+
+The separate `wasm` job leaves the native build matrix unchanged. It runs
+`build-deps.sh`, `build.sh --web` (which calls `package-web.sh`) and
+`smoke.sh --rom-only`, then uploads `x4prosim-<version>-wasm`. The wasm64
+sysroot/compiler cache key includes the SDK version and dependency recipes.
+The artifact contains both emulators, ROMs, browser assets and the blank card;
+it contains no firmware or user SD images.
+
+Pages uploads and deploys only on **pushes to `x4prosim` in
+`serialx/x4prosim`**. `WASM_PAGES_BRANCH` in the workflow is the single branch
+setting; feature branches, PRs and forks do not deploy. Enable **Settings >
+Pages > Source: GitHub Actions** and allow that branch in the `github-pages`
+environment. GitHub Actions and Internet-hosted Pages deployment were not
+executed during local validation.
+
+`serve.py` sets COOP/COEP headers for SharedArrayBuffer and pthreads. On Pages,
+the bundled MIT-licensed `coi-serviceworker` supplies isolation and reloads
+once on first visit. Use HTTPS or localhost; service workers must be allowed
+when the server cannot set those headers. Local header-less hosting passed
+with this service worker. The package makes no runtime CDN requests.
+
+### Measurements and limits
+
+CrossPoint X3, Apple M5 Max (18 logical CPUs, 128 GiB RAM), macOS arm64,
+Emscripten 6.0.12, Node 26.11.0. Node/native figures below are medians of three
+sequential fresh-process runs, each using original copies of the same flash
+and logically 1 GiB SD. Home is the third completed `X3_DRF` refresh; settled
+is the first complete subsequent `[MEM]` line after thumbnail generation.
+
+| Runtime | Home | Settled | Peak emulator RSS |
+| --- | ---: | ---: | ---: |
+| Native, current tree | 4.710 s | 23.290 s | 74.2 MiB |
+| Node, old TCI port | 16.209 s | 108.470 s | 541.4 MiB |
+| Node, JIT `MEMORY64=2` (default) | 6.784 s | 56.447 s | 834.8 MiB |
+| Node, JIT `MEMORY64=1` | 6.941 s | 57.570 s | 692.4 MiB |
+
+The default reaches Home **2.39x faster than TCI** with higher peak RSS.
+The initial one-instruction-per-block JIT build took 12.711 s; ordinary blocks
+with learned MMIO boundaries, a smaller cache and fixed memory produced the
+final result above. Both final modes instantiate 548 hot TBs by Home and
+roughly 1,488 by capture; every tested Node X3 screenshot matches native.
+With `sleep=off`, native/JIT Home medians are 2.360/4.596 s and their first
+eight firmware wait timestamps match exactly. With `sleep=on`, host scheduling
+causes small timestamp variation, including in the native reference.
+
+Chrome 155.0.8059.39 / V8 15.5.35.20, one fresh process per final JIT case:
+
+| Browser build | Image-load-to-Home | Navigation-to-Home | Settled | Peak Chrome process-tree RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Old TCI reference | 19.79 s | not measured | 145.46 s | 5.57 GiB |
+| JIT `MEMORY64=2` | 9.070 s | 9.083 s | 85.279 s | 5.196 GiB |
+| JIT `MEMORY64=2`, service worker | 9.576 s | 9.612 s | 85.804 s | 5.863 GiB |
+| JIT `MEMORY64=1` | 8.712 s | 9.240 s | 85.269 s | 4.675 GiB |
+
+Browser figures are single-run observations, not medians. The TCI browser row
+comes from the previous port's measurements; it was not rerun in this series.
+These compare complete ports on different QEMU versions, not an isolated
+backend A/B. Memory64 used file pickers while the other JIT cases loaded URLs,
+so these runs do not establish which mode is faster in Chrome. Navigation time
+includes page loading and any isolation reload. Browser RSS includes Chrome's
+process tree through SD export and Stop; Node RSS covers only the emulator
+through capture. Those memory columns are not directly comparable.
+
+Wi-Fi is disabled in Wasm. Browser images consume their full logical size:
+a sparse 1 GiB SD still takes 1 GiB, with extra copies for loading and export.
+Start with the packaged 64 MiB card when possible. IndexedDB persistence is
+not implemented. X4 Pro acceptance covers blank-flash ROM boot, panel creation
+and pointer delivery without an error; no X4 Pro firmware image was available
+to verify its Home screen or touch response. These tests do not establish
+coverage for every firmware or all self-modifying-code/remapping cases.
+
 ## Where it stands (2026-10-08, 1007e firmware)
 
 Machine `-machine x4pro` (in `hw/xtensa/esp32s3.c`: `x4pro_board_init`) boots the

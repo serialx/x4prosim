@@ -28,6 +28,32 @@ Windows, one archive per emulator (`xtensa-softmmu` = X4 Pro,
 Linux and macOS archives need the runtime libraries (glib, pixman, SDL2,
 libslirp, libgcrypt, libpng) installed; the Windows one bundles them.
 
+## WebAssembly build
+
+The browser and Node builds use a wasm64 JIT, compiling hot guest blocks to
+WebAssembly while cold blocks run through TCI. Download the
+`x4prosim-<version>-wasm` Actions artifact, or build with Emscripten 6.0.12:
+
+```sh
+x4prosim/wasm/build-deps.sh
+x4prosim/wasm/build.sh --web
+python3 x4prosim/wasm/serve.py build-wasm-32limit/web-dist
+```
+
+The default `MEMORY64=2` mode uses 32-bit memory addressing for compatibility
+with modern Chrome, Firefox and Safari. `WASM64_MODE=64` selects native
+Memory64 (Chrome 133+, Firefox 134+, not Safari); both use 64-bit host pointers.
+Chrome 155 and Node 26 are verified; Firefox/Safari emulator runs are untested.
+Threads require cross-origin isolation, provided by the local server or the
+bundled service worker on HTTPS hosting.
+
+X3 Home took a 6.784 s Node median versus 16.209 s for the old TCI port and
+4.710 s native; the final Chrome default run took 9.070 s versus the older
+TCI measurement of 19.79 s. The JIT uses more Node memory than TCI. Wi-Fi is
+disabled, SD writes must be downloaded before closing the browser, and X4 Pro
+has only ROM/panel acceptance so far. See [the full WebAssembly guide](X4PROSIM.md#webassembly-build)
+for prerequisites, both modes, measurement methods, memory use and limits.
+
 ## Quick start
 
 Use Python 3.9 or newer, GLib 2.66 or newer, and libgcrypt 1.9.4 or newer
