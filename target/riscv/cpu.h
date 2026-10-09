@@ -574,6 +574,10 @@ struct ArchCPU {
 
     /* Configuration Settings */
     RISCVCPUConfig cfg;
+    /* Instruction costs in icount ticks (nanoseconds with shift=0). */
+    uint8_t cost_rom_ns, cost_sram_ns, cost_flash_ns;
+    uint8_t cost_load, cost_store, cost_mul, cost_div, cost_branch;
+    uint32_t cost_clock_scale; /* Zero means the untuned 1x rate. */
     RISCVSATPModes satp_modes;
 
     QEMUTimer *pmu_timer;

@@ -1321,7 +1321,11 @@ static bool riscv_tcg_cpu_realize(CPUState *cs, Error **errp)
 #ifndef CONFIG_USER_ONLY
     CPURISCVState *env = &cpu->env;
 
-    tcg_cflags_set(CPU(cs), CF_PCREL);
+    /* Region-dependent costs cannot share a TB across virtual aliases. */
+    if (MAX(1, cpu->cost_rom_ns) == MAX(1, cpu->cost_sram_ns) &&
+        MAX(1, cpu->cost_flash_ns) == MAX(1, cpu->cost_sram_ns)) {
+        tcg_cflags_set(cs, CF_PCREL);
+    }
 
     if (cpu->cfg.ext_sstc) {
         riscv_timer_init(cpu);
