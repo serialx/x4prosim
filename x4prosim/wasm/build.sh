@@ -16,14 +16,17 @@ export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
 export EM_PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
 export EM_PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR"
 export CPATH="$SYSROOT/include"
-case "${WASM64_MODE:-64}" in
+# The 32-bit memory mode had the lower Node boot median and needs no Memory64.
+case "${WASM64_MODE:-32}" in
     64) MEMORY64=1; BUILD="$ROOT/build-wasm"; MODE_FLAG=--disable-wasm64-32bit-address-limit ;;
     32) MEMORY64=2; BUILD="$ROOT/build-wasm-32limit"; MODE_FLAG=--enable-wasm64-32bit-address-limit ;;
     *) echo 'WASM64_MODE must be 64 or 32' >&2; exit 1 ;;
 esac
-export CFLAGS="-O3 -pthread -DWASM_BIGINT -sMEMORY64=$MEMORY64"
+# MMIO under icount exits through longjmp frequently. Keep those exits in Wasm
+# instead of crossing into JavaScript exception handlers on every access.
+export CFLAGS="-O3 -pthread -DWASM_BIGINT -sMEMORY64=$MEMORY64 -sSUPPORT_LONGJMP=wasm"
 export CXXFLAGS="$CFLAGS"
-export LDFLAGS="-pthread -sWASM_BIGINT -sASYNCIFY=1 -sMEMORY64=$MEMORY64 -L$SYSROOT/lib"
+export LDFLAGS="-pthread -sWASM_BIGINT -sASYNCIFY=1 -sMEMORY64=$MEMORY64 -sSUPPORT_LONGJMP=wasm -L$SYSROOT/lib"
 command -v emcc >/dev/null
 pkg-config --print-errors --exists glib-2.0 pixman-1 zlib libffi libgcrypt || {
     echo "Run $ROOT/x4prosim/wasm/build-deps.sh first" >&2
