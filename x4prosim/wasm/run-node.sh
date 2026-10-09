@@ -22,8 +22,8 @@ shift 2
 chip=$(od -An -tu1 -j12 -N1 "$flash" | tr -d ' ')
 machine=${X4MACHINE:-$([ "$chip" = 5 ] && echo x3 || echo x4pro)}
 case "$machine" in
-    x3) arch=riscv32; shift_bits=0; accel=tcg ;;
-    x4pro) arch=xtensa; shift_bits=2; accel=tcg ;;
+    x3) arch=riscv32; shift_bits=0; accel=tcg,tb-size=64 ;;
+    x4pro) arch=xtensa; shift_bits=2; accel=tcg,tb-size=64 ;;
     *) echo "unsupported machine: $machine" >&2; exit 2 ;;
 esac
 cp "$flash" "$flash.run"
