@@ -22,12 +22,13 @@ pkg-config --print-errors --exists glib-2.0 pixman-1 zlib libffi libgcrypt || {
 
 # Override upstream's fixed 2 GB / ES-module settings for browser and plain Node
 # use, while keeping the pthread main-loop and fiber/libffi Asyncify support.
-LINK_FLAGS="-O3 $LDFLAGS -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM=1"
+LINK_FLAGS="-O3 -g2 $LDFLAGS -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM=1"
 LINK_FLAGS+=" -sALLOW_TABLE_GROWTH=1 -sALLOW_MEMORY_GROWTH=1"
 LINK_FLAGS+=" -sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=2147483648"
 LINK_FLAGS+=" -sSTACK_SIZE=8388608 -sASYNCIFY_STACK_SIZE=1048576"
 LINK_FLAGS+=" -sEXIT_RUNTIME=1 -sEXPORT_ES6=0 -sASYNCIFY_IMPORTS=ffi_call_js"
 LINK_FLAGS+=" -sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,TTY,FS"
+LINK_FLAGS+=" -lnodefs.js --pre-js $ROOT/x4prosim/wasm/node-fs.js"
 mkdir -p "$ROOT/build-wasm"
 cd "$ROOT/build-wasm"
 emconfigure ../configure \
