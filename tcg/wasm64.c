@@ -695,6 +695,8 @@ static uintptr_t tcg_qemu_tb_exec_tci(CPUArchState *env)
 #define MAX_INSTANCES 12000
 
 static int instances_global;
+static int instances_compiled;
+static __thread bool jit_stats;
 
 /* Avoid overwrapping of begin/end pointers */
 #define INSTANCES_BUF_MAX (MAX_INSTANCES + 1)
@@ -705,12 +707,18 @@ static __thread int instances_end;
 
 static void add_instance(wasm_tb_func tb_func, void *tb_ptr)
 {
+    int compiled;
+
     instances[instances_end].tb_func = tb_func;
     instances[instances_end].tb_ptr = tb_ptr;
     set_info_local(tb_ptr, &(instances[instances_end]));
     instances_end  = (instances_end + 1) % INSTANCES_BUF_MAX;
 
     qatomic_inc(&instances_global);
+    compiled = qatomic_fetch_inc(&instances_compiled) + 1;
+    if (jit_stats) {
+        fprintf(stderr, "WASM_JIT compiled_tbs=%d\n", compiled);
+    }
 }
 
 static __thread int instance_pending_gc;
@@ -803,6 +811,10 @@ static int thread_idx_max;
 
 static void init_wasm(void)
 {
+    jit_stats = EM_ASM_INT({
+        return !!(Module.wasmJitStats ||
+                  (ENVIRONMENT_IS_NODE && process.env.WASM_JIT_STATS));
+    });
     thread_idx = qatomic_fetch_inc(&thread_idx_max);
     ctx.stack = g_malloc(TCG_STATIC_CALL_ARGS_SIZE + TCG_STATIC_FRAME_SIZE);
     ctx.buf128 = g_malloc(16);
