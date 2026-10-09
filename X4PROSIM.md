@@ -191,24 +191,20 @@ learns recurring MMIO boundaries to avoid repeated mid-block exits. Native
 Wasm longjmp and fixed 256 MiB linear memory reduce runtime overhead.
 For larger workloads, rebuild with `WASM_INITIAL_MEMORY=<bytes>` or
 `WASM_MEMORY_GROWTH=1`; growth can cost performance. `WASM_ACCEL` overrides
-the Node accelerator setting; `ICOUNT_SLEEP=off` disables idle-time warping
+the Node accelerator setting; `RUN_NODE_SLEEP=off` disables idle-time warping
 for deterministic timing comparisons. The production default stays `on`.
 
-For optional faster execution, use `TURBO=1 x4prosim/wasm/run-node.sh flash.bin
-sd.img`, `X4TURBO=1 x4prosim/run.sh flash.bin sd.img`, or the browser's
-**Turbo (not timing-accurate)** checkbox (also `?turbo=1`). Turbo is off by
-default. It keeps `-icount` with `sleep=off`, sets SD latencies and GPSPI setup
-overheads to zero, and enables `ssi.esp32s3.gpspi`'s opt-in `zero-wire-time`
-property for synchronous SPI transfers (default `off`). Removing `icount`
-instead makes per-transfer device timers depend on host scheduling, which
-slowed native execution and stalled Node boot in testing.
-X3 panel BUSY pulses retain a 1 ms minimum for polling drivers; X4 Pro uses
-1 µs frames and 1 ms refresh BUSY, retaining its fixed 2 ms power delays.
-Firmware delays and host overhead still apply. **Turbo is not timing-accurate and must not be
-used for timing measurements.** `smoke.sh --turbo flash.bin sd.img` checks
-Home, settled startup and the PPM against a fresh native turbo reference
-(or `REFERENCE_PPM`), without comparing guest timestamps; ordinary smoke and
-accurate-mode timestamp comparisons are unchanged.
+For faster execution, use `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`,
+`X4TURBO=1 x4prosim/run.sh flash.bin sd.img`, or the browser's **Turbo (not
+timing-accurate)** checkbox (`?turbo=1`). Turbo is off by default. It retains
+`-icount` with `sleep=off`, minimizes SD and panel delays, and opts into GPSPI
+`zero-wire-time` synchronous transfers; X3 BUSY pulses retain a 1 ms minimum.
+Removing `icount` made transfer timers depend on host scheduling, slowing native
+boot and stalling Node. Turbo reaches settled startup in 4.789 s in Node and
+5.558 s in Chrome, faster than the device end to end, but **changes guest timing
+and must not be used for timing measurements**. `smoke.sh --turbo flash.bin
+sd.img` compares the panel against a fresh native turbo reference without
+requiring timestamp equality.
 
 ### CI and hosting
 
@@ -234,45 +230,59 @@ with this service worker. The package makes no runtime CDN requests.
 
 ### Measurements and limits
 
-CrossPoint X3, Apple M5 Max (18 logical CPUs, 128 GiB RAM), macOS arm64,
-Emscripten 6.0.12, Node 26.11.0. Node/native figures below are medians of three
-sequential fresh-process runs, each using original copies of the same flash
-and logically 1 GiB SD. Home is the third completed `X3_DRF` refresh; settled
-is the first complete subsequent `[MEM]` line after thumbnail generation.
+CrossPoint 1.6.5 X3, Apple M5 Max (18 logical CPUs, 128 GiB RAM), macOS arm64,
+Emscripten 6.0.12, Node 26.11.0, Chrome 155. These final `MEMORY64=2` figures
+are medians of three fresh-process runs with original flash/SD copies and no
+concurrent builds or profilers. Home is the third completed `X3_DRF` refresh;
+settled is the first subsequent `[MEM]` line after thumbnail generation.
+Chrome times include navigation, image loading and startup, with GPU/WebGL on.
+Each column is an independent median, so phase medians need not sum to total.
 
-| Runtime | Home | Settled | Peak emulator RSS |
+| Runtime / mode | Home | Home → settled | Settled total |
 | --- | ---: | ---: | ---: |
-| Native, current tree | 4.710 s | 23.290 s | 74.2 MiB |
-| Node, old TCI port | 16.209 s | 108.470 s | 541.4 MiB |
-| Node, JIT `MEMORY64=2` (default) | 6.784 s | 56.447 s | 834.8 MiB |
-| Node, JIT `MEMORY64=1` | 6.941 s | 57.570 s | 692.4 MiB |
+| Native, accurate `sleep=off` | 1.785 s | 8.789 s | 10.574 s |
+| Native, accurate `sleep=on` | 4.124 s | 11.695 s | 15.819 s |
+| Node, old TCI port, `sleep=on` (historical) | 16.209 s | — | 108.470 s |
+| Node JIT, accurate `sleep=off` | 2.394 s | 10.064 s | 12.464 s |
+| Node JIT, accurate `sleep=on` (default) | 4.635 s | 13.073 s | 17.708 s |
+| Chrome, old TCI port (historical) | 19.79 s | — | 145.46 s |
+| Chrome JIT, accurate `sleep=off` | 3.069 s | 11.656 s | 14.758 s |
+| Chrome JIT, accurate `sleep=on` (default) | 5.264 s | 14.091 s | 19.355 s |
+| Node JIT, turbo | 1.097 s | 3.706 s | 4.789 s |
+| Chrome JIT, turbo | 1.636 s | 3.917 s | 5.558 s |
 
-The default reaches Home **2.39x faster than TCI** with higher peak RSS.
-The initial one-instruction-per-block JIT build took 12.711 s; ordinary blocks
-with learned MMIO boundaries, a smaller cache and fixed memory produced the
-final result above. Both final modes instantiate 548 hot TBs by Home and
-roughly 1,488 by capture; every tested Node X3 screenshot matches native.
-With `sleep=off`, native/JIT Home medians are 2.360/4.596 s and their first
-eight firmware wait timestamps match exactly. With `sleep=on`, host scheduling
-causes small timestamp variation, including in the native reference.
+Accurate `sleep=off` reaches Home faster than the device in both Node and
+Chrome (guest 3.250 s), but settled startup still takes 1.24x/1.47x guest
+time (about 10.05 s). The thumbnail phase itself takes 1.48x/1.71x its
+6.799 s of guest time. The accurate-mode settled target remains unmet;
+turbo meets the numeric targets by changing device delays.
 
-Chrome 155.0.8059.39 / V8 15.5.35.20, one fresh process per final JIT case:
+All final native, Node and Chrome panel captures match byte for byte. Accurate
+`sleep=off` preserves the first eight native firmware wait timestamps;
+`sleep=on` can vary with host scheduling, including natively. Both address
+modes build and pass smoke; native Memory64 was not rebenchmarked in the final
+series. The old TCI rows were not rerun and compare different QEMU versions,
+not an isolated backend change. Earlier measurements found higher Node RSS
+with the JIT (835 MiB versus TCI 541 MiB); final RSS was not remeasured as a
+controlled comparison. Detailed experiments and rejected candidates are in
+[the performance report](x4prosim/wasm/perf/turbo-profile.md).
 
-| Browser build | Image-load-to-Home | Navigation-to-Home | Settled | Peak Chrome process-tree RSS |
-| --- | ---: | ---: | ---: | ---: |
-| Old TCI reference | 19.79 s | not measured | 145.46 s | 5.57 GiB |
-| JIT `MEMORY64=2` | 9.070 s | 9.083 s | 85.279 s | 5.196 GiB |
-| JIT `MEMORY64=2`, service worker | 9.576 s | 9.612 s | 85.804 s | 5.863 GiB |
-| JIT `MEMORY64=1` | 8.712 s | 9.240 s | 85.269 s | 4.675 GiB |
+### What to upstream
 
-Browser figures are single-run observations, not medians. The TCI browser row
-comes from the previous port's measurements; it was not rerun in this series.
-These compare complete ports on different QEMU versions, not an isolated
-backend A/B. Memory64 used file pickers while the other JIT cases loaded URLs,
-so these runs do not establish which mode is faster in Chrome. Navigation time
-includes page loading and any isolation reload. Browser RSS includes Chrome's
-process tree through SD export and Stop; Node RSS covers only the emulator
-through capture. Those memory columns are not directly comparable.
+Keep these as separate reviewable changes, with their correctness and A/B evidence:
+
+- Empty auxiliary timer-list wakeup guard (`util/qemu-timer.c`).
+- Direct dispatch for simple subpage MMIO (`system/physmem.c`, `accel/tcg/cputlb.c`).
+- Synchronous SD media checks for ordinary images (`block/block-backend.c`, `hw/sd/sd.c`).
+- Learned MMIO block boundaries (`accel/tcg/translate-all.c`).
+- Exact SHA callback signatures and the intmatrix `BIT_ULL` fix in the ESP32 models.
+- SDL browser input polling that drains the proxy queue without yielding under BQL
+  (`ui/sdl2.c`), for the Emscripten port.
+
+BQL batching was not retained because native Home non-regression was not
+established. Optional turbo changes timing and should remain separate from the
+accurate-mode optimizations. GitHub Actions, Internet-hosted Pages, Safari,
+Firefox and X4 Pro firmware were not executed in this local verification.
 
 Wi-Fi is disabled in Wasm. Browser images consume their full logical size:
 a sparse 1 GiB SD still takes 1 GiB, with extra copies for loading and export.

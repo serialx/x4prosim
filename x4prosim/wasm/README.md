@@ -30,5 +30,25 @@ Evidence defaults to `build-wasm/evidence/smoke` in either mode.
 
 `WASM_SYSROOT=/absolute/path/to/sysroot-wasm64` lets both build scripts reuse
 compatible dependencies. `WASM_JIT_STATS=1` enables Node JIT module counts;
-`ICOUNT_SLEEP=off` gives deterministic idle timing for comparisons. See the
+`RUN_NODE_SLEEP=off` gives deterministic idle timing for comparisons. See the
 full guide before changing the fixed 256 MiB heap or 64 MiB translation cache.
+
+Turbo is opt-in: `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`, or the
+browser checkbox / `?turbo=1`. It keeps `-icount` with `sleep=off`, minimizes device
+delays and uses synchronous GPSPI transfers. It changes guest timing;
+`smoke.sh --turbo flash.bin sd.img` compares against native turbo without
+requiring timestamp equality. Default accurate mode is unchanged.
+
+Final M5 Max three-run medians (`MEMORY64=2`, seconds):
+
+| Runtime / mode | Home | Settled |
+| --- | ---: | ---: |
+| Node accurate, `sleep=off` | 2.394 | 12.464 |
+| Chrome accurate, `?sleep=off` | 3.069 | 14.758 |
+| Node turbo | 1.097 | 4.789 |
+| Chrome turbo | 1.636 | 5.558 |
+
+Accurate mode beats guest time to Home (3.250 s), but misses settled startup
+(about 10.05 s); turbo beats both by changing delays. Both address modes build
+and pass smoke. GitHub Actions, hosted Pages, Safari/Firefox and X4 Pro firmware
+were not executed locally; X4 Pro coverage is ROM/panel only.

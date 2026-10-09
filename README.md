@@ -47,12 +47,21 @@ Chrome 155 and Node 26 are verified; Firefox/Safari emulator runs are untested.
 Threads require cross-origin isolation, provided by the local server or the
 bundled service worker on HTTPS hosting.
 
-X3 Home took a 6.784 s Node median versus 16.209 s for the old TCI port and
-4.710 s native; the final Chrome default run took 9.070 s versus the older
-TCI measurement of 19.79 s. The JIT uses more Node memory than TCI. Wi-Fi is
-disabled, SD writes must be downloaded before closing the browser, and X4 Pro
-has only ROM/panel acceptance so far. See [the full WebAssembly guide](X4PROSIM.md#webassembly-build)
-for prerequisites, both modes, measurement methods, memory use and limits.
+On an M5 Max, accurate X3 `sleep=off` reaches Home in 2.394 s in Node and
+3.069 s in Chrome, below the device's 3.250 s; settled startup still takes
+12.464/14.758 s versus about 10.05 s of guest time. Default `sleep=on`
+Home/settled medians are 4.635/17.708 s in Node and 5.264/19.355 s in Chrome.
+Historical old-TCI results were 16.209/108.470 s and 19.79/145.46 s respectively.
+
+Optional `TURBO=1` for Node or the browser's **Turbo (not timing-accurate)**
+checkbox (`?turbo=1`) reduces device delays: Home/settled medians are
+1.097/4.789 s in Node and 1.636/5.558 s in Chrome. Turbo is faster than the
+device end to end, but changes guest timing; accurate mode remains the default.
+Wi-Fi is disabled, SD writes must be downloaded before closing the browser,
+and X4 Pro has only ROM/panel acceptance. GitHub Actions, hosted Pages,
+Safari/Firefox and X4 Pro firmware were not run in local verification.
+See [the full WebAssembly guide](X4PROSIM.md#webassembly-build) for build modes,
+measurement methods, limits and upstream candidates.
 
 ## Quick start
 
