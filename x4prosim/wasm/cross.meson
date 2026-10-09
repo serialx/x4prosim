@@ -1,0 +1,26 @@
+# Shared by the dependency build and QEMU. Paths are relative to this file.
+[constants]
+sysroot = '@DIRNAME@' / '../../build-wasm-deps/sysroot'
+
+[host_machine]
+system = 'emscripten'
+cpu_family = 'wasm32'
+cpu = 'wasm32'
+endian = 'little'
+
+[binaries]
+c = 'emcc'
+cpp = 'em++'
+ar = 'emar'
+ranlib = 'emranlib'
+pkg-config = ['pkg-config', '--static']
+
+[properties]
+needs_exe_wrapper = true
+pkg_config_libdir = sysroot / 'lib/pkgconfig'
+
+[built-in options]
+c_args = ['-O3', '-pthread', '-DWASM_BIGINT', '-I' + sysroot / 'include']
+cpp_args = ['-O3', '-pthread', '-DWASM_BIGINT', '-I' + sysroot / 'include']
+c_link_args = ['-pthread', '-sWASM_BIGINT', '-sASYNCIFY=1', '-L' + sysroot / 'lib']
+cpp_link_args = ['-pthread', '-sWASM_BIGINT', '-sASYNCIFY=1', '-L' + sysroot / 'lib']
