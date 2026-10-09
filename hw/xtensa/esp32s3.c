@@ -560,9 +560,12 @@ static void esp32s3_soc_init(Object *obj)
 static void esp32s3_soc_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
     dc->realize = esp32s3_soc_realize;
     device_class_set_legacy_reset(dc, esp32s3_soc_reset);
+    /* The selective handler owns resets of the peripheral and RTC domains. */
+    rc->child_foreach = NULL;
 }
 
 static const TypeInfo esp32s3_soc_info = {
