@@ -1978,6 +1978,9 @@ static uint64_t do_ld_mmio_beN(CPUState *cpu, CPUTLBEntryFull *full,
     mr = section->mr;
 
     BQL_LOCK_GUARD();
+    if (mr->subpage && !full->attrs.memory && !(addr & (size - 1))) {
+        mr = memory_region_resolve_subpage(mr, &mr_offset, size);
+    }
     return int_ld_mmio_beN(cpu, full, ret_be, addr, size, mmu_idx,
                            type, ra, mr, mr_offset);
 }
@@ -2492,6 +2495,9 @@ static uint64_t do_st_mmio_leN(CPUState *cpu, CPUTLBEntryFull *full,
     mr = section->mr;
 
     BQL_LOCK_GUARD();
+    if (mr->subpage && !full->attrs.memory && !(addr & (size - 1))) {
+        mr = memory_region_resolve_subpage(mr, &mr_offset, size);
+    }
     return int_st_mmio_leN(cpu, full, val_le, addr, size, mmu_idx,
                            ra, mr, mr_offset);
 }

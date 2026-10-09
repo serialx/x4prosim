@@ -11,6 +11,14 @@
 #include "exec/hwaddr.h"
 #include "system/ramlist.h"
 
+/*
+ * Resolve an aligned, single-section subpage MMIO access. Otherwise return mr
+ * without changing offset. mr must be a subpage region, and the transaction
+ * must allow MMIO. The caller holds BQL and an RCU read-side lock.
+ */
+MemoryRegion *memory_region_resolve_subpage(MemoryRegion *mr, hwaddr *offset,
+                                           unsigned size);
+
 /**
  * physical_memory_map: Map guest physical memory region into host virtual
  *                      address.

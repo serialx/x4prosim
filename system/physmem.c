@@ -2909,6 +2909,50 @@ static MemTxResult flatview_write(FlatView *fv, hwaddr addr, MemTxAttrs attrs,
 static bool flatview_access_valid(FlatView *fv, hwaddr addr, hwaddr len,
                                   bool is_write, MemTxAttrs attrs);
 
+MemoryRegion *memory_region_resolve_subpage(MemoryRegion *mr, hwaddr *offset,
+                                           unsigned size)
+{
+    subpage_t *subpage = container_of(mr, subpage_t, iomem);
+    AddressSpaceDispatch *d = flatview_to_dispatch(subpage->fv);
+    MemoryRegionSection *section;
+    MemoryRegion *leaf;
+    hwaddr addr = *offset;
+    hwaddr within, xlat;
+
+#ifdef CONFIG_FUZZ
+    /* Keep the DMA-read instrumentation in the ordinary subpage path. */
+    return mr;
+#endif
+    if (!is_power_of_2(size) || addr >= TARGET_PAGE_SIZE ||
+        size > TARGET_PAGE_SIZE - addr || (addr & (size - 1))) {
+        return mr;
+    }
+    section = &d->map.sections[subpage->sub_section[addr]];
+    leaf = section->mr;
+    within = subpage->base + addr - section->offset_within_address_space;
+    if (leaf->ram || leaf->rom_device || leaf->is_iommu || leaf->alias ||
+        leaf->subpage || leaf->flush_coalesced_mmio || !leaf->ops ||
+        !leaf->ops->read || !leaf->ops->write ||
+        leaf->ops->valid.accepts ||
+        int128_gt(int128_add(int128_make64(within), int128_make64(size)),
+                  section->size)) {
+        return mr;
+    }
+    xlat = within + section->offset_within_region;
+    /*
+     * The flatview path must issue exactly this access, and its validation
+     * must have no callback side effects. Keep invalid accesses on that path
+     * too, including its error reporting and handling of split accesses.
+     */
+    if ((xlat & (size - 1)) ||
+        size < leaf->ops->valid.min_access_size ||
+        memory_access_size(leaf, size, xlat) != size) {
+        return mr;
+    }
+    *offset = xlat;
+    return leaf;
+}
+
 static MemTxResult subpage_read(void *opaque, hwaddr addr, uint64_t *data,
                                 unsigned len, MemTxAttrs attrs)
 {
