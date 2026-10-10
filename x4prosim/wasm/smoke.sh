@@ -2,6 +2,15 @@
 # smoke.sh [--turbo] flash.bin sd.img or [--turbo] --rom-only.
 # Optional TIMEOUT, EVIDENCE_DIR, NODE, WASM64_MODE, NATIVE_QEMU, REFERENCE_PPM.
 # RUN_NODE overrides the launcher for comparisons; REQUIRE_JIT=0 permits TCI.
+# WEB_URL opts into smoke.mjs followed by explorer-smoke.mjs using an already
+# running Chrome (CDP_PORT) and packaged server. Use a picker URL without flash/sd
+# queries, PICKER_FLASH=X3 release app, EXPLORER_EPUB=demian.epub and
+# EXPLORER_SMALL_EPUB=another.epub; mtools and fsck.fat must be on PATH.
+# Browser tests inherit existing smoke.mjs env vars; the explorer always uses the
+# default blank card. INPUT_SD defaults to the supplied source SD for smoke.mjs.
+# The legacy X3 browser check requires a card that causes guest writes; set
+# PICKER_SD and INPUT_SD to that fixture (the explorer ignores PICKER_SD).
+# Omit WEB_URL to retain the existing Node/native-only flow (including CI).
 # Images are copied; logs, PPM screenshots and measurements remain in evidence/.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -206,4 +215,13 @@ except Exception as exc:
 print('PASS: X4 Pro blank-flash ROM and panel screendump' if rom_only else
       f'PASS: {firmware_machine} Home refresh and settled panel screendump' +
       ('; X4 Pro blank-flash ROM also passed' if firmware_machine == 'x3' else ''))
+if os.environ.get('WEB_URL') and not os.environ.get('NATIVE_QEMU'):
+    if rom_only:
+        sys.exit('WEB_URL requires the X3 firmware and SD arguments, not --rom-only')
+    browser_env = {**os.environ, 'EVIDENCE_DIR': str(evidence)}
+    browser_env.setdefault('INPUT_SD', str(Path(args[1]).resolve()))
+    for script in ('smoke.mjs', 'explorer-smoke.mjs'):
+        subprocess.run([os.environ.get('NODE', 'node'),
+                        str(root / 'x4prosim/wasm/web' / script), os.environ['WEB_URL']],
+                       env=browser_env, check=True)
 PY

@@ -380,17 +380,17 @@ smoke: try {
         await screenshot('web-keyboard-up.png');
         measurements.keyboard_up_changed_canvas = true;
         await evaluate('document.querySelector("#download").click()');
-        await waitFor('savedSD?.byteLength && !document.querySelector("#download").disabled');
-        measurements.downloaded_sd_bytes = await evaluate('savedSD.byteLength');
+        await waitFor('!document.querySelector("#download").disabled');
         while (!fs.existsSync(path.join(downloads, 'sd.img'))) {
             if (Date.now() > deadline) throw new Error('SD download did not complete');
             await delay(500);
         }
-        if (fs.statSync(path.join(downloads, 'sd.img')).size !== measurements.downloaded_sd_bytes) {
+        measurements.downloaded_sd_bytes = fs.statSync(path.join(downloads, 'sd.img')).size;
+        if (!process.env.INPUT_SD) throw new Error('Set INPUT_SD to check guest SD writes');
+        if (fs.statSync(process.env.INPUT_SD).size !== measurements.downloaded_sd_bytes) {
             throw new Error('Downloaded SD file has the wrong size');
         }
         measurements.downloaded_sd_sha256 = await sha256(path.join(downloads, 'sd.img'));
-        if (!process.env.INPUT_SD) throw new Error('Set INPUT_SD to check guest SD writes');
         measurements.input_sd_sha256 = await sha256(process.env.INPUT_SD);
         if (measurements.input_sd_sha256 === measurements.downloaded_sd_sha256) {
             throw new Error('Downloaded SD did not change from the input');
@@ -407,7 +407,7 @@ smoke: try {
     if (await evaluate('document.querySelector("#turbo").disabled')) {
         throw new Error('Stop must allow changing Turbo before the next boot');
     }
-    measurements.exported_sd_bytes = await evaluate('savedSD.byteLength');
+    measurements.exported_sd_bytes = await evaluate('sdImage.byteLength');
     measurements.stop_removed_runtime = true;
     measurements.sampled_peak_chrome_rss_kib = peakRSS;
     measurements.sampled_peak_chrome_cpu_percent = peakCPU;
