@@ -120,7 +120,7 @@ macOS arm64. On Linux, install and activate emsdk 6.0.12 before building.
 # macOS prerequisites
 brew install emscripten ninja pkg-config autoconf automake libtool dosfstools mtools
 # Ubuntu prerequisites (plus activated emsdk 6.0.12)
-sudo apt install build-essential autoconf automake libtool pkg-config ninja-build \
+sudo apt install build-essential autoconf automake libtool libltdl-dev pkg-config ninja-build \
   meson python3-venv texinfo gettext dosfstools mtools
 
 x4prosim/wasm/build-deps.sh          # build-wasm-deps/sysroot-wasm64
