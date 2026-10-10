@@ -24,6 +24,7 @@ function turboProperties(machine) {
         ...['transaction-overhead-us', 'transaction-overhead-ns', 'buffer-overhead-ns']
             .map(name => `driver=ssi.esp32s3.gpspi,property=${name},value=0`),
         'driver=ssi.esp32s3.gpspi,property=zero-wire-time,value=on',
+        'esp32_wifi.rx-frame-us=500',
         ...(machine === 'x3' ?
             [...['frame-us', 'refresh-overhead-us'].map(name => `uc8279.${name}=0`),
                 ...['pon-ms', 'pof-ms', 'busy-ms'].map(name => `uc8279.${name}=1`)] :

@@ -41,7 +41,6 @@
 
 // 50ms between beacons
 #define BEACON_TIME 500000000
-#define INTER_FRAME_TIME 5000000
 #define WAIT_ACK_TIMEOUT 10000000
 #define DEBUG 0
 #define ENABLE_BEACON 1
@@ -109,7 +108,8 @@ static void Esp32_WLAN_inject_timer(void *opaque)
     if (s->inject_queue_size > 0) {
         // there are more packets... schedule
         // the timer for sending them as well
-        timer_mod(s->inject_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + INTER_FRAME_TIME);
+        timer_mod(s->inject_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                  MAX(s->rx_frame_us, 1U) * 1000ULL);
     } else {
         // we wait until a new packet schedules
         // us again
@@ -325,7 +325,8 @@ void Esp32_WLAN_insert_frame(Esp32WifiState *s, struct mac80211_frame *frame)
         // running currently, let's schedule
         // one run...
         s->inject_timer_running = 1;
-        timer_mod(s->inject_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + INTER_FRAME_TIME);
+        timer_mod(s->inject_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                  MAX(s->rx_frame_us, 1U) * 1000ULL);
     }
 
 }

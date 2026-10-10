@@ -51,6 +51,8 @@ Accurate timing is the default for `run-node.sh` and the browser page (checkbox
 unticked). Opt into turbo with `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`
 or `?turbo=1`; `TURBO=0` and `?turbo=0` remain accepted. Turbo keeps `-icount`
 with `sleep=off`, minimizes device delays and uses synchronous GPSPI transfers.
+It also reduces Wi-Fi RX frame spacing from 5 ms to 0.5 ms, leaving time for
+the guest to service receive interrupts. Accurate mode keeps the 5 ms default.
 It changes guest timing; `smoke.sh` tests accurate mode and
 `smoke.sh --turbo flash.bin sd.img` compares against native turbo without
 requiring timestamp equality.

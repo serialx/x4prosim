@@ -31,6 +31,7 @@ typedef struct Esp32WifiState {
     int inject_queue_size;
     struct mac80211_frame *inject_queue;
     int inject_timer_running;
+    uint32_t rx_frame_us;
     unsigned int inject_sequence_number;
     int beacon_ap;
 
