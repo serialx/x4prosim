@@ -291,6 +291,10 @@ async function prepareFlash(input) {
     if (bytes.length === 0x1000000) {
         return {flash: input, machine: bytes[12] === 5 ? 'x3' : 'x4pro', composed: false};
     }
+    const merged = !xota && FlashImage.expandMerged(bytes);
+    if (merged) {
+        return {flash: merged.buffer, machine: merged[12] === 5 ? 'x3' : 'x4pro', composed: false};
+    }
     if (bytes.length < 24 || bytes[0] !== 0xe9) {
         throw new Error('Choose a firmware .bin, an X4 Pro .xota update, or a 16 MiB flash dump (16777216 bytes).');
     }

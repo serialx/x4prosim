@@ -32,6 +32,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Esp32s3GpspiState, ESP32S3_GPSPI)
 
 #define R_CMD           0x00
 #define R_CLOCK         0x0C
+#define R_USER          0x10
 #define R_MS_DLEN       0x1C
 #define R_DMA_CONF      0x30
 #define R_DMA_INT_ENA   0x34
@@ -49,6 +50,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(Esp32s3GpspiState, ESP32S3_GPSPI)
 #define INT_TRANS_DONE  BIT(12)
 #define DMA_TX_ENA      BIT(28)
 #define DMA_RX_ENA      BIT(27)
+#define USER_MOSI       BIT(27)
+#define USER_MISO       BIT(28)
 #define MAX_TRANSFER_BYTES (1 << 15)
 
 struct Esp32s3GpspiState {
@@ -81,7 +84,10 @@ static void gpspi_transfer(void *opaque)
     uint32_t dma_conf = s->regs[R_DMA_CONF / 4];
     uint32_t chan;
 
-    if (dma_conf & DMA_TX_ENA) {
+    /* DMA channels can remain enabled between half-duplex transactions.
+     * Only the active data phase may consume a descriptor or touch its buffer.
+     */
+    if ((dma_conf & DMA_TX_ENA) && (s->regs[R_USER / 4] & USER_MOSI)) {
         if (!s->gdma ||
             !esp_gdma_get_channel_periph(s->gdma, GDMA_SPI2,
                                          ESP_GDMA_OUT_IDX, &chan) ||
@@ -95,7 +101,7 @@ static void gpspi_transfer(void *opaque)
     for (uint32_t i = 0; i < s->transfer_bytes; i++) {
         s->transfer_buf[i] = ssi_transfer(s->bus, s->transfer_buf[i]);
     }
-    if (dma_conf & DMA_RX_ENA) {
+    if ((dma_conf & DMA_RX_ENA) && (s->regs[R_USER / 4] & USER_MISO)) {
         if (!s->gdma ||
             !esp_gdma_get_channel_periph(s->gdma, GDMA_SPI2,
                                          ESP_GDMA_IN_IDX, &chan) ||

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose emulator flash from a CrossPoint release app, build dir, or flash dump.
+"""Compose emulator flash from a release app, merged image, build dir, or dump.
 
 Only Python's standard library is needed. App bytes are never modified.
 """
@@ -135,13 +135,26 @@ def make_flash(source, machine=None):
             detect_chip(data, machine)
         return data
     chip = detect_chip(data, machine)
+    if data[TABLE_OFFSET:TABLE_OFFSET + 2] == b'\xaa\x50':
+        if len(data) > FLASH_SIZE:
+            raise ValueError('merged firmware exceeds 16 MiB flash')
+        if len(data) < TABLE_OFFSET + TABLE_SIZE:
+            raise ValueError('truncated merged firmware partition table')
+        entries = read_partitions(data[TABLE_OFFSET:TABLE_OFFSET + TABLE_SIZE])
+        apps = [offset for kind, subtype, offset, size in entries
+                if kind == 0 and offset + 24 <= len(data) and data[offset] == 0xE9
+                and struct.unpack_from('<H', data, offset + 12)[0] == chip]
+        if not apps:
+            raise ValueError('merged firmware has no matching application image')
+        # Preserve the bundled bootloader, partition layout, and all app/data bytes.
+        return data.ljust(FLASH_SIZE, b'\xff')
     boot = (BOOT_DIR / f"bootloader-{CHIPS[chip][1]}.bin").read_bytes()
     return compose(data, boot, partition_table(), machine)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help="release app .bin, build directory, or 16 MiB image")
+    parser.add_argument("source", type=Path, help="app or merged .bin, build directory, or 16 MiB image")
     parser.add_argument("output", type=Path)
     parser.add_argument("--machine", choices=("x3", "x4pro"), help="check the detected chip matches this machine")
     args = parser.parse_args()

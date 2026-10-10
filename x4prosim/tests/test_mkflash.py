@@ -66,6 +66,33 @@ class MkflashTest(unittest.TestCase):
         data = bytes(range(256)) * (mkflash.FLASH_SIZE // 256)
         self.assertEqual(mkflash.make_flash(self.write('flash.bin', data)), data)
 
+    def test_short_merged_flash_preserves_layout(self):
+        for chip in (5, 9):
+            app = self.app(chip)
+            merged = bytearray(b'\xff' * (0x10000 + len(app)))
+            merged[:len(app)] = app
+            merged[0x8000:0x8c00] = self.table
+            merged[0x10000:] = app
+            merged[0x9000:0x9004] = b'NVS!'
+            flash = mkflash.make_flash(self.write('anything.bin', merged))
+            self.assertEqual(flash[:len(merged)], merged)
+            self.assertEqual(flash[len(merged):], b'\xff' * (mkflash.FLASH_SIZE - len(merged)))
+
+    def test_invalid_merged_flash(self):
+        merged = bytearray(b'\xff' * 0x10100)
+        merged[:24] = self.app(9)[:24]
+        merged[0x8000:0x8c00] = self.table
+        with self.assertRaisesRegex(ValueError, 'application'):
+            mkflash.make_flash(self.write('missing-app.bin', merged))
+        merged[0x10000:0x10018] = self.app(5)[:24]
+        with self.assertRaisesRegex(ValueError, 'application'):
+            mkflash.make_flash(self.write('wrong-chip.bin', merged))
+        with self.assertRaisesRegex(ValueError, 'truncated'):
+            mkflash.make_flash(self.write('truncated.bin', merged[:0x8010]))
+        merged[0x8010] ^= 1
+        with self.assertRaisesRegex(ValueError, 'MD5'):
+            mkflash.make_flash(self.write('bad-table.bin', merged))
+
     def test_build_directories(self):
         for nested in (False, True):
             with self.subTest(nested=nested):

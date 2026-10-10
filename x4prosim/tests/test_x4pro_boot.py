@@ -31,7 +31,9 @@ class StockBootPeripherals(unittest.TestCase):
         for suffix in ['in', 'out']:
             os.mkfifo(f'{monitor}.{suffix}')
         self.qmp_in = os.fdopen(os.open(f'{monitor}.in', os.O_RDWR), 'w')
-        self.qmp_out = os.fdopen(os.open(f'{monitor}.out', os.O_RDWR), 'r')
+        # Keep select() and readline() on the same buffer: RESET events and
+        # their command reply can arrive together in a single pipe write.
+        self.qmp_out = os.fdopen(os.open(f'{monitor}.out', os.O_RDWR), 'rb', buffering=0)
         self.addCleanup(self.qmp_in.close)
         self.addCleanup(self.qmp_out.close)
         self.proc = subprocess.Popen([
@@ -233,6 +235,7 @@ class StockBootPeripherals(unittest.TestCase):
         self.write(dma + 0x60 + 0x48, 0)  # SPI2 TX on channel 0
         self.write(dma + 0x60 + 0x20, (desc & 0xFFFFF) | (1 << 21))
         self.write(spi + 0x30, 1 << 28)
+        self.write(spi + 0x10, 1 << 27)  # MOSI data phase
         self.write(spi + 0x1C, 80 * 8 - 1)
         self.write(spi, 1 << 24)
         self.command('clock_step 1000000')
@@ -245,12 +248,36 @@ class StockBootPeripherals(unittest.TestCase):
         self.write(dma + 0x48, 0)
         self.write(dma + 0x20, (desc & 0xFFFFF) | (1 << 22))
         self.write(spi + 0x30, 1 << 27)
+        self.write(spi + 0x10, 1 << 28)  # MISO data phase
         self.write(spi, 1 << 24)
         self.command('clock_step 1000000')
         self.assertEqual(self.read(payload), 0xFF010000)
         self.assertEqual(self.read(payload + 76), 0xFFFFFFFF)
         self.assertEqual((self.read(desc) >> 12) & 0xFFF, 80)
         self.assertEqual(self.read(desc) >> 31, 0)
+
+    def test_spi_inactive_dma_phase_preserves_descriptor_and_buffer(self):
+        spi, dma, desc, payload = 0x60024000, 0x6003F000, 0x3FC90000, 0x3FC90100
+        # A previous DMA transaction can leave a channel enabled and pointing
+        # at memory the driver has since freed. The opposite phase must not
+        # reuse it, even when descriptor owner checking is disabled.
+        for rx in (True, False):
+            with self.subTest(rx=rx):
+                channel = dma if rx else dma + 0x60
+                config = (1 << 31) | (4 << 12) | 4 | (1 << 30)
+                self.write(desc, config)
+                self.write(desc + 4, payload)
+                self.write(desc + 8, 0)
+                self.write(payload, 0x3FCE9724)
+                self.write(channel + 0x48, 0)
+                self.write(channel + 0x20, (desc & 0xFFFFF) | (1 << (22 if rx else 21)))
+                self.write(spi + 0x30, 1 << (27 if rx else 28))
+                self.write(spi + 0x10, 1 << (27 if rx else 28))
+                self.write(spi + 0x1C, 7)
+                self.write(spi, 1 << 24)
+                self.command('clock_step 1000000')
+                self.assertEqual(self.read(payload), 0x3FCE9724)
+                self.assertEqual(self.read(desc), config)
 
     def test_panel_scan_directions(self):
         gpio, spi = 0x60004000, 0x60024000
