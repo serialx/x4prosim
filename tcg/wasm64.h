@@ -35,6 +35,10 @@ struct WasmContext {
      * Flag indicating whether to initialize the block index(1) or not(0).
      */
     uint32_t do_init;
+
+    /* Per-thread instance lookup and Asyncify tail-call resumption. */
+    uint32_t thread_index;
+    uint32_t resume_index;
 };
 
 /* Instantiated Wasm function of a TB */
@@ -52,6 +56,7 @@ static inline uintptr_t call_wasm_tb(wasm_tb_func f, struct WasmContext *ctx)
 struct WasmInstanceInfo {
     void *tb_ptr;
     wasm_tb_func tb_func;
+    uint32_t table_index;
 };
 
 /*

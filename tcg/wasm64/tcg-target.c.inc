@@ -178,6 +178,7 @@ typedef enum {
     OPC_BR = 0x0c,
     OPC_RETURN = 0x0f,
     OPC_CALL = 0x10,
+    OPC_RETURN_CALL_INDIRECT = 0x13,
     OPC_LOCAL_GET = 0x20,
     OPC_LOCAL_SET = 0x21,
     OPC_LOCAL_TEE = 0x22,
@@ -823,7 +824,76 @@ static void tcg_wasm_out_exit_tb(TCGContext *s, uintptr_t arg)
     tcg_wasm_out_op(s, OPC_RETURN);
 }
 
-static void tcg_wasm_out_goto(TCGContext *s, TCGReg target, int block_depth)
+/* A private wasm32 table holds this thread's instantiated TBs in both modes. */
+static void tcg_wasm_out_tail_call(TCGContext *s)
+{
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_GET, CTX_IDX);
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_GET, TMP32_LOCAL_0_IDX);
+    tcg_wasm_out_op_idx(s, OPC_RETURN_CALL_INDIRECT, 0); /* start type */
+    tcg_wasm_out8(s, 0); /* table index */
+}
+
+static void tcg_wasm_out_chain(TCGContext *s, TCGReg target, bool nonnull)
+{
+    intptr_t ofs;
+
+    /* goto_ptr may request an exit with a null target. */
+    if (!nonnull) {
+        tcg_wasm_out_op_idx(s, OPC_GLOBAL_GET, REG_IDX(target));
+        tcg_wasm_out_op(s, OPC_I64_EQZ);
+        tcg_wasm_out_op_block(s, OPC_IF, BLOCK_NORET);
+        tcg_wasm_out_op_const(s, OPC_I64_CONST, 0);
+        tcg_wasm_out_op(s, OPC_RETURN);
+        tcg_wasm_out_op(s, OPC_END);
+    }
+
+    /* Instance slots follow the header and counters in each TB. */
+    tcg_wasm_out_op_idx(s, OPC_GLOBAL_GET, REG_IDX(target));
+    if (tcg_max_ctxs > 1) {
+        ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(thread_index));
+        tcg_wasm_out_op_ldst(s, OPC_I32_LOAD, 0, ofs);
+        tcg_wasm_out_op(s, OPC_I64_EXTEND_I32_U);
+        tcg_wasm_out_op_const(s, OPC_I64_CONST, 3);
+        tcg_wasm_out_op(s, OPC_I64_SHL);
+        tcg_wasm_out_op(s, OPC_I64_ADD);
+    }
+    ofs = tcg_wasm_out_norm_ptr(s, sizeof(struct WasmTBHeader) +
+                               tcg_max_ctxs * sizeof(int32_t));
+    tcg_wasm_out_op_ldst(s, OPC_I64_LOAD, 0, ofs);
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_TEE, TMP64_LOCAL_0_IDX);
+    tcg_wasm_out_op(s, OPC_I64_EQZ);
+    tcg_wasm_out_op_block(s, OPC_IF, BLOCK_NORET);
+    tcg_wasm_out_op_const(s, OPC_I64_CONST, 0);
+    tcg_wasm_out_op(s, OPC_RETURN);
+    tcg_wasm_out_op(s, OPC_END);
+
+    /* The instance ring slot may have been evicted or reused. */
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_GET, TMP64_LOCAL_0_IDX);
+    ofs = tcg_wasm_out_norm_ptr(s, offsetof(struct WasmInstanceInfo, tb_ptr));
+    tcg_wasm_out_op_ldst(s, OPC_I64_LOAD, 0, ofs);
+    tcg_wasm_out_op_idx(s, OPC_GLOBAL_GET, REG_IDX(target));
+    tcg_wasm_out_op(s, OPC_I64_NE);
+    tcg_wasm_out_op_block(s, OPC_IF, BLOCK_NORET);
+    tcg_wasm_out_op_const(s, OPC_I64_CONST, 0);
+    tcg_wasm_out_op(s, OPC_RETURN);
+    tcg_wasm_out_op(s, OPC_END);
+
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_GET, TMP64_LOCAL_0_IDX);
+    ofs = tcg_wasm_out_norm_ptr(s,
+                              offsetof(struct WasmInstanceInfo, table_index));
+    tcg_wasm_out_op_ldst(s, OPC_I32_LOAD, 0, ofs);
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_SET, TMP32_LOCAL_0_IDX);
+    ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(resume_index));
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_GET, TMP32_LOCAL_0_IDX);
+    tcg_wasm_out_op_ldst(s, OPC_I32_STORE, 0, ofs);
+    ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(do_init));
+    tcg_wasm_out_op_const(s, OPC_I32_CONST, 1);
+    tcg_wasm_out_op_ldst(s, OPC_I32_STORE, 0, ofs);
+    tcg_wasm_out_tail_call(s);
+}
+
+static void tcg_wasm_out_goto(TCGContext *s, TCGReg target, int block_depth,
+                              bool nonnull)
 {
     intptr_t ofs;
 
@@ -843,17 +913,16 @@ static void tcg_wasm_out_goto(TCGContext *s, TCGReg target, int block_depth)
     tcg_wasm_out_op_idx(s, OPC_BR, block_depth); /* br to the top of loop */
     tcg_wasm_out_op(s, OPC_END);
 
-    /* Store the target TB to ctx.tb_ptr and return */
+    /* Keep the standard target pointer for exits and Asyncify rewinding. */
     ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(tb_ptr));
     tcg_wasm_out_op_idx(s, OPC_GLOBAL_GET, REG_IDX(target));
     tcg_wasm_out_op_ldst(s, OPC_I64_STORE, 0, ofs);
-    tcg_wasm_out_op_const(s, OPC_I64_CONST, 0);
-    tcg_wasm_out_op(s, OPC_RETURN);
+    tcg_wasm_out_chain(s, target, nonnull);
 }
 
 static void tcg_wasm_out_goto_ptr(TCGContext *s, TCGReg arg)
 {
-    tcg_wasm_out_goto(s, arg, 2);
+    tcg_wasm_out_goto(s, arg, 2, false);
 }
 
 static void tcg_wasm_out_goto_tb(
@@ -872,7 +941,7 @@ static void tcg_wasm_out_goto_tb(
     tcg_wasm_out_op_const(s, OPC_I64_CONST, cur_reset_ptr);
     tcg_wasm_out_op(s, OPC_I64_NE);
     tcg_wasm_out_op_block(s, OPC_IF, BLOCK_NORET);
-    tcg_wasm_out_goto(s, TCG_REG_TMP, 3);
+    tcg_wasm_out_goto(s, TCG_REG_TMP, 3, true);
     tcg_wasm_out_op(s, OPC_END);
 }
 
@@ -2570,6 +2639,9 @@ static const uint8_t mod_2[] = {
     0x02, 0x07,                               /* shared mem(64bit) */
     0x00, 0x80, 0x80, 0x10,                   /* min: 0, max: 262144 pages */
 #endif
+    0x03, 0x65, 0x6e, 0x76,                   /* module: "env" */
+    0x08, 0x74, 0x62, 0x5f, 0x74, 0x61, 0x62, 0x6c, 0x65, /* tb_table */
+    0x01, 0x70, 0x00, 0x00,                   /* funcref table, min 0 */
     0x06, 0x68, 0x65, 0x6c, 0x70, 0x65, 0x72, /* module: "helper" */
     0x01, 0x75,                               /* name: "u" */
     0x00, 0x01,                               /* func type 1 */
@@ -2710,6 +2782,22 @@ static void tcg_out_tb_start(TCGContext *s)
     /* Followed by TCI code */
     h->tci_ptr = s->code_ptr;
 
+    /*
+     * Asyncify resumes the original C-to-Wasm call after a helper yields.
+     * Tail calls have removed the intermediate TB frames, so redirect that
+     * entry to the actual suspended TB without resetting its block index.
+     */
+    ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(tb_ptr));
+    tcg_wasm_out_op_ldst(s, OPC_I64_LOAD, 0, ofs);
+    tcg_wasm_out_op_const(s, OPC_I64_CONST, (uintptr_t)h);
+    tcg_wasm_out_op(s, OPC_I64_NE);
+    tcg_wasm_out_op_block(s, OPC_IF, BLOCK_NORET);
+    ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(resume_index));
+    tcg_wasm_out_op_ldst(s, OPC_I32_LOAD, 0, ofs);
+    tcg_wasm_out_op_idx(s, OPC_LOCAL_SET, TMP32_LOCAL_0_IDX);
+    tcg_wasm_out_tail_call(s);
+    tcg_wasm_out_op(s, OPC_END);
+
     /* A shared TB can run on another CPU in the same round-robin thread. */
     ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(env));
     tcg_wasm_out_op_ldst(s, OPC_I64_LOAD, 0, ofs);
@@ -2773,7 +2861,7 @@ static int tcg_out_tb_end(TCGContext *s)
             },
             {
                 MOD_2_PH_IMPORT_VEC_NUM_OFF,
-                HELPER_IDX_START + helpers_len() + 1/* memory */
+                HELPER_IDX_START + helpers_len() + 2/* memory and table */
             },
     }, 2);
     if (res < 0) {

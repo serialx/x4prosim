@@ -60,6 +60,7 @@ EM_JS_PRE(void*, instantiate_wasm, (void *wasm_begin,
     const inst = new WebAssembly.Instance(mod, {
             "env" : {
                 "memory" : wasmMemory,
+                "tb_table" : Module.__wasm_tb.table,
             },
             "helper" : helper,
     });
@@ -705,12 +706,20 @@ static __thread struct WasmInstanceInfo instances[INSTANCES_BUF_MAX];
 static __thread int instances_begin;
 static __thread int instances_end;
 
+EM_JS_PRE(void, set_wasm_table_entry, (wasm_tb_func tb_func, int index),
+{
+    Module.__wasm_tb.table.set(index,
+        wasmTable.get(ENC_WASM_TABLE_IDX(tb_func)));
+});
+
 static void add_instance(wasm_tb_func tb_func, void *tb_ptr)
 {
     int compiled;
 
     instances[instances_end].tb_func = tb_func;
     instances[instances_end].tb_ptr = tb_ptr;
+    instances[instances_end].table_index = instances_end + 1;
+    set_wasm_table_entry(tb_func, instances_end + 1);
     set_info_local(tb_ptr, &(instances[instances_end]));
     instances_end  = (instances_end + 1) % INSTANCES_BUF_MAX;
 
@@ -738,7 +747,10 @@ static void remove_old_instances(void)
     /* removes the half of the oldest instances in the buffer */
     num /= 2;
     for (int i = 0; i < num; i++) {
-        EM_ASM({ removeFunction($0); }, instances[instances_begin].tb_func);
+        EM_ASM({
+            Module.__wasm_tb.table.set($1, null);
+            removeFunction($0);
+        }, instances[instances_begin].tb_func, instances_begin + 1);
         instances[instances_begin].tb_ptr = NULL;
         instances_begin = (instances_begin + 1) % INSTANCES_BUF_MAX;
     }
@@ -777,9 +789,14 @@ static void check_gc_completion(void)
     }
 }
 
-EM_JS_PRE(void, init_wasm_js, (void *instance_done_gc),
+EM_JS_PRE(void, init_wasm_js, (void *instance_done_gc, int table_size),
 {
     Module.__wasm_tb = {
+        table: new WebAssembly.Table({
+            "element" : "anyfunc",
+            "initial" : table_size,
+            "maximum" : table_size
+        }),
         inst_gc_registry: new FinalizationRegistry((i) => {
             if (i == "tbinstance") {
                 const memory_v = new DataView(HEAP8.buffer);
@@ -816,10 +833,11 @@ static void init_wasm(void)
                   (ENVIRONMENT_IS_NODE && process.env.WASM_JIT_STATS));
     });
     thread_idx = qatomic_fetch_inc(&thread_idx_max);
+    ctx.thread_index = thread_idx;
     ctx.stack = g_malloc(TCG_STATIC_CALL_ARGS_SIZE + TCG_STATIC_FRAME_SIZE);
     ctx.buf128 = g_malloc(16);
     ctx.tci_tb_ptr = (uint32_t *)&tci_tb_ptr;
-    init_wasm_js(&instance_done_gc);
+    init_wasm_js(&instance_done_gc, INSTANCES_BUF_MAX + 1);
 }
 
 static __thread bool initdone;
