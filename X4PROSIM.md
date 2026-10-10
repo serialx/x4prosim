@@ -54,19 +54,39 @@ ninja qemu-system-xtensa qemu-system-riscv32
 ```
 macOS: `brew install glib pixman ninja pkg-config python3 libgcrypt libpng libslirp sdl2 dosfstools mtools`.
 
-Firmware image: any 16 MB X4 Pro flash image. Three ways to get one:
-- A dump of a real device: `esptool.py --chip esp32s3 read_flash 0 0x1000000 flash.bin`
-  (works only if the device doesn't use flash encryption).
-- A PlatformIO or ESP-IDF build: `x4prosim/mkflash.sh <build dir> flash.bin` merges
-  `bootloader.bin`, `partitions.bin` and the app (`firmware.bin`, or the only other
-  `.bin`) at 0x0/0x8000/0x10000.
-- A single app `.bin` released as an OTA update: flash a bootloader and partition
-  table first (from any build), then the app at 0x10000.
+### Firmware image
+
+The easiest route is an official CrossPoint release app `.bin`. Use the
+`crosspoint-<version>-x3-x4.bin` asset for X3 (ESP32-C3), or
+`crosspoint-<version>-x4pro.bin` for X4 Pro (ESP32-S3):
+
+```sh
+python3 x4prosim/mkflash.py crosspoint-1.6.5-x3-x4.bin flash.bin
+python3 x4prosim/mkflash.py crosspoint-1.6.5-x4pro.bin flash-x4pro.bin
+```
+
+This needs only Python 3, detects the chip, adds the bundled bootloader and
+CrossPoint partition table, and preserves the app bytes. Bootloader provenance,
+licenses and regeneration commands are in [x4prosim/boot/](x4prosim/boot/README.md).
+C3 images include the cached X3 device type in NVS; S3 NVS stays erased.
+`--machine x3|x4pro` checks that the image matches the requested machine.
+
+Other inputs:
+- A PlatformIO or ESP-IDF build: `python3 x4prosim/mkflash.py <build dir> flash.bin`
+  merges its `bootloader.bin`, `partition*.bin` and app (`firmware.bin`, or the
+  only other `.bin`) at 0x0/0x8000/0x10000. Nested IDF boot/table directories work.
+- A complete 16 MiB flash image passes through unchanged:
+  `python3 x4prosim/mkflash.py dump.bin flash.bin`.
+- A real-device dump: `esptool.py --chip esp32s3 read_flash 0 0x1000000 flash.bin`
+  (works only if the device does not use flash encryption).
+
+`mkflash.sh` remains a compatibility wrapper. `run.sh` and `drive.py` select
+X3 or X4 Pro from the resulting bootloader header.
 
 CrossDink example: `pio run -e x4-pro-debug` in a CrossDink checkout, then:
 
 ```sh
-x4prosim/mkflash.sh <CrossDink>/.pio/build/x4-pro-debug flash.bin
+python3 x4prosim/mkflash.py <CrossDink>/.pio/build/x4-pro-debug flash.bin
 x4prosim/run.sh flash.bin sd.img          # firmware log (USB-CDC) on stdout, SDL window if available
 x4prosim/drive.py flash.bin sd.img log.txt wait:30 shot:home.png   # headless
 ```
@@ -509,7 +529,7 @@ Notes:
   reads the gauge through raw `Wire` calls with the bus down, and the failed
   `endTransmission` keeps the Wire lock, so the IMU init blocks forever. A device
   that has booted once has `cphw/dev_det` in NVS and skips the probe, which is why
-  nobody sees it. `mkflash.sh` seeds exactly that key (`mknvs.py`) on C3 images.
+  nobody sees it. `mkflash.py` seeds exactly that key (`mknvs.py`) on C3 images.
 - `mksd.py` needs `mkfs.vfat` and `mcopy` (`brew install dosfstools mtools`; the
   build needs `brew install libslirp` too).
 - Serial control (CrossPoint's `scripts/debugging_monitor.py` / `device_control.py`

@@ -1,0 +1,170 @@
+Official CrossPoint release composition verification — 2026-10-10
+
+Result: acceptance (a), (b), (c) PASS. X4 Pro also reaches native Home.
+No app firmware bytes were changed or committed. No Wasm rebuild was run.
+
+Inputs: official crosspoint-reader/crosspoint-reader release 1.6.5:
+crosspoint-1.6.5-x3-x4.bin: 5589776 bytes, SHA256 8eccf614b6d6f82284d3ec775a383fd421ec1880481ff863cf44a831e0385764
+crosspoint-1.6.5-x4pro.bin: 5632640 bytes, SHA256 9ebd6ef1e0bb39ff8dcbff3947f938cb6158a1bcb1769d3811cb8bc6c6667eab
+
+Boot asset recipe: x4prosim/boot/README.md and regen.sh.
+C3 elf2image output compared byte for byte with
+~/workspace/crosspoint-reader/.pio/build/default/bootloader.bin: PASS.
+Generated partition table compared byte for byte with
+~/workspace/crosspoint-reader/.pio/build/default/partitions.bin: PASS.
+Partition SHA256: bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce.
+
+(a) Compose and compare (paths below relative to repository root):
+python3 x4prosim/mkflash.py <official>/crosspoint-1.6.5-x3-x4.bin build-wasm/evidence/official-image/x3.bin
+cmp build-wasm/evidence/official-image/x3.bin build-wasm-32limit/web-dist/flash.bin
+Result: exit 0, identical 16,777,216-byte files.
+X3 flash SHA256: 80b8d1de62ff9ade1bf5770177e23283677ce13427b724a3e7091409fab8b12a.
+
+(b) Native X3:
+ninja -C build
+The emulator and test binaries built, but the final functional-test environment
+step failed because sandbox networking could not download pygdbmi from PyPI.
+ninja -C build qemu-system-riscv32 qemu-system-xtensa
+Result: PASS, both native emulator targets current.
+
+cp build-wasm-32limit/web-dist/sd.img build-wasm/evidence/official-image/sd-x3.img
+env -u X4MACHINE python3 x4prosim/drive.py build-wasm/evidence/official-image/x3.bin build-wasm/evidence/official-image/sd-x3.img build-wasm/evidence/official-image/native-x3.log wait:30 shot:build-wasm/evidence/official-image/home.png
+Result: exit 0; visually inspected 528x792 screenshot shows Home with Browse
+Files, Library, File Transfer, Settings and 80% battery. Native launcher selected
+X3 automatically. Firmware logged cached X3 type, SD detected and panel refreshes.
+Wire lock/NULL TX warnings still appear, but boot proceeds to Home.
+
+(c) Node smoke, existing default MEMORY64=2 binaries:
+EVIDENCE_DIR="$PWD/build-wasm/evidence/official-image/smoke" x4prosim/wasm/smoke.sh build-wasm/evidence/official-image/x3.bin build-wasm-32limit/web-dist/sd.img
+Result: PASS: X3 Home refresh and X4 Pro blank-flash ROM; both panel screendumps
+captured. Accurate mode, no Wasm rebuild. X3 milestone 4.861 s; 1487 JIT-compiled
+TBs at capture. This smoke's X4 Pro case tests blank-flash ROM, not the S3 app.
+Sandbox initially denied ps; successful run used escalated local process access.
+Native capture likewise needed local Unix monitor socket permission.
+
+(d) Native official X4 Pro:
+python3 x4prosim/mkflash.py <official>/crosspoint-1.6.5-x4pro.bin build-wasm/evidence/official-image/x4pro.bin
+cp build-wasm-32limit/web-dist/sd.img build-wasm/evidence/official-image/sd-x4pro.img
+env -u X4MACHINE python3 x4prosim/drive.py build-wasm/evidence/official-image/x4pro.bin build-wasm/evidence/official-image/sd-x4pro.img build-wasm/evidence/official-image/native-x4pro.log wait:30 shot:build-wasm/evidence/official-image/x4pro.png
+Result: exit 0, automatically selected X4 Pro from S3 bootloader header.
+X4 Pro flash SHA256: 1f418cec5fdd01929562c5091386236a22547fbe485c4555ec79f919e960e76c.
+ROM, bootloader entry, app device banner, SDMMC mount, panel initialization and
+Home all observed. Visually inspected 480x800 screenshot shows Home with Browse
+Files, Library, File Transfer, Settings and 80% battery. NVS was left erased.
+The IMU is reported absent; app continues. No emulator investigation/change made.
+Both native tests used copies of the existing SD image, which contains books and
+settings; Home logs a missing thumbnail before displaying the cover. This is not
+a blank-SD first-run or interaction test.
+
+Tests:
+python3 -m unittest x4prosim.tests.test_mkflash -v
+PASS: 7 tests, optional firmware comparison skipped without its input.
+CROSSPOINT_RELEASE_APP=<official>/crosspoint-1.6.5-x3-x4.bin python3 -m unittest x4prosim.tests.test_mkflash -v
+PASS: all 7 tests including full byte comparison.
+python3 -m unittest discover -s x4prosim/tests -v
+PASS: 7 tests, one optional skip.
+x4prosim/boot/regen.sh
+PASS; regenerated hashes match provenance.
+x4prosim/mkflash.sh ~/workspace/crosspoint-reader/.pio/build/default build-wasm/evidence/official-image/build-dir.bin
+PASS, real build-directory compatibility wrapper.
+Standalone mknvs.py output equals imported mknvs.image seed: PASS.
+git diff --check: PASS.
+
+Native X3 complete log:
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x1010
+load:0x403cbf10,len:0x9f4
+load:0x403ce710,len:0x2ea4
+entry 0x403cbf10
+[530] [INF] [HW] Using cached device type: X3
+[530] [XTDET] NVS hw_calib/screenType: not set
+[642] [XTDET] X3 stock probe VER=FF FF FF BUSY-timeout=0 -> UC8253
+[   642][E][Wire.cpp:424] beginTransmission(): could not acquire lock
+[   643][E][Wire.cpp:556] write(): NULL TX buffer pointer
+[   643][E][Wire.cpp:453] endTransmission(): NULL TX buffer pointer
+[   644][E][Wire.cpp:424] beginTransmission(): could not acquire lock
+[   644][E][Wire.cpp:556] write(): NULL TX buffer pointer
+[   644][E][Wire.cpp:453] endTransmission(): NULL TX buffer pointer
+[657] [INF] [GYR] SDK IMU initialized
+[657] [INF] [CLK] SDK RTC found[657] [INF] [MAIN] Hardware detect: X3
+[669] [SD] SD card detected
+[1118]   Wait complete:  X3_PON (128 ms)
+[2054]   Wait complete:  X3_DRF (936 ms)
+[2728]   Wait complete:  X3_DRF (382 ms)
+[2781] [HOME] Failed to open file for reading: /.crosspoint/epub_2674129756/thumb_226.bmp
+[3256]   Wait complete:  X3_DRF (383 ms)
+[3748]   Wait complete:  X3_DRF (383 ms)
+[4231]   Wait complete:  X3_DRF (383 ms)
+[4709]   Wait complete:  X3_DRF (382 ms)
+[8804]   Wait complete:  X3_DRF (383 ms)
+[10026] [INF] [MEM] Free: 115320 bytes, Total: 266300 bytes, Min Free: 65012 bytes, MaxAlloc: 98292 bytes
+[20031] [INF] [MEM] Free: 115320 bytes, Total: 266300 bytes, Min Free: 65012 bytes, MaxAlloc: 98292 bytes
+
+Native X4 Pro complete log:
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x4 (SPI_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0xfb0
+load:0x403c8700,len:0xaf4
+load:0x403cb700,len:0x2e24
+entry 0x403c8898
+[430] [ERR] [GYR] SDK IMU not found
+[430] [INF] [CLK] SDK RTC found[430] [INF] [MAIN] Device: xteink_x4_pro
+[650] [SD] SDMMC card mounted
+[663] [INF] [FrontlightMgr] apply: brightness=0 level=0 totalDuty=0 coolDuty=0 warmDuty=0 lit=0
+[663] [INF] [FrontlightMgr] begin: attached gpio=8 warm=9 ok=1
+[663] [INF] [FrontlightMgr] apply: brightness=0 level=0 totalDuty=0 coolDuty=0 warmDuty=0 lit=0
+[663] [INF] [FrontlightMgr] apply: brightness=0 level=0 totalDuty=0 coolDuty=0 warmDuty=0 lit=0
+[663] [INF] [LIGHT] Frontlight up: 60% warm=50% off
+[663] [XTDET] NVS hw_calib/screenType: not set
+[781] [XTDET] bus probe VER=00 00 01 FF FF FLG=13 -> UltraChip
+[781] [XTDET] MTP[0x000..0x02F]: 05 0A 0F 14 50 5A 64 7F FF FF FF A5 1F 27 27 36 17 00 29 07 22 64 02 58 00 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[781] [XTDET] promoted SSD1677 -> UC8179 (LUT_VER=01)
+[969]   Wait complete:  8179_PON (1 ms)
+[2470]   Wait complete:  8179_DRF (1501 ms)
+[2602] [HOME] Failed to open file for reading: /.crosspoint/epub_2674129756/thumb_226.bmp
+[2909]   Wait complete:  8179_DRF (250 ms)
+[3269]   Wait complete:  8179_DRF (250 ms)
+[3624]   Wait complete:  8179_DRF (251 ms)
+[3977]   Wait complete:  8179_DRF (250 ms)
+[4723]   Wait complete:  8179_DRF (250 ms)
+[10013] [INF] [MEM] Free: 194524 bytes, Total: 291596 bytes, Min Free: 187748 bytes, MaxAlloc: 147444 bytes
+[10013] [INF] [MEM] PSRAM: Free: 8255740 bytes, Total: 8388608 bytes, Min Free: 8213492 bytes, MaxAlloc: 8126452 bytes
+[20043] [INF] [MEM] Free: 194524 bytes, Total: 291596 bytes, Min Free: 187748 bytes, MaxAlloc: 147444 bytes
+[20043] [INF] [MEM] PSRAM: Free: 8255740 bytes, Total: 8388608 bytes, Min Free: 8213492 bytes, MaxAlloc: 8126452 bytes
+
+Node smoke measurements:
+{
+  "x3": {
+    "turbo": false,
+    "startup_to_rom_s": 0.2646329590352252,
+    "milestone_s": 4.860748292063363,
+    "settled_mem_s": 17.521937916986644,
+    "screenshot_s": 17.59048870904371,
+    "jit_compiled_tbs": 1487,
+    "home_jit_compiled_tbs": 548,
+    "peak_rss_kib": 861872.0,
+    "sampled_peak_rss_kib": 757344,
+    "screenshot": "/Users/serialx/orca/workspaces/x4prosim/wasm-jit/build-wasm/evidence/official-image/smoke/x3.ppm",
+    "log": "/Users/serialx/orca/workspaces/x4prosim/wasm-jit/build-wasm/evidence/official-image/smoke/x3.log"
+  },
+  "x4pro": {
+    "turbo": false,
+    "startup_to_rom_s": 0.24780887505039573,
+    "milestone_s": 0.2738615410635248,
+    "settled_mem_s": 2.274337208014913,
+    "screenshot_s": 2.3034177910303697,
+    "jit_compiled_tbs": 254,
+    "home_jit_compiled_tbs": 3,
+    "peak_rss_kib": 794976.0,
+    "sampled_peak_rss_kib": 580560,
+    "screenshot": "/Users/serialx/orca/workspaces/x4prosim/wasm-jit/build-wasm/evidence/official-image/smoke/x4pro.ppm",
+    "log": "/Users/serialx/orca/workspaces/x4prosim/wasm-jit/build-wasm/evidence/official-image/smoke/x4pro.log"
+  }
+}
