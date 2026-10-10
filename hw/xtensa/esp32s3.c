@@ -635,6 +635,12 @@ static void esp32s3_machine_init(MachineState *machine)
                            memmap[ESP32S3_MEMREGION_DRAM].size, &error_fatal);
     memory_region_add_subregion(sys_mem, memmap[ESP32S3_MEMREGION_DRAM].base, dram);
 
+    /* Bluetooth controller exchange memory, separate from application DRAM. */
+    MemoryRegion *bt_em = g_new(MemoryRegion, 1);
+    memory_region_init_ram(bt_em, NULL, "esp32s3.bt-em", 64 * KiB,
+                           &error_fatal);
+    memory_region_add_subregion(sys_mem, 0x3fc00000, bt_em);
+
 
     memory_region_init_io(&ss->iomem, OBJECT(&ss->cpu[0]), &esp32s3_io_ops,
                           NULL, "esp32s3.iomem", 0xd1000);
@@ -926,6 +932,14 @@ static void esp32s3_machine_init(MachineState *machine)
             memory_region_add_subregion_overlap(sys_mem, stubs[i].base,
                                                 sysbus_mmio_get_region(SYS_BUS_DEVICE(d), 0), 1);
         }
+    }
+
+    {
+        DeviceState *ble = qdev_new("misc.esp32s3.ble");
+        object_property_add_child(OBJECT(ss), "ble", OBJECT(ble));
+        sysbus_realize_and_unref(SYS_BUS_DEVICE(ble), &error_fatal);
+        memory_region_add_subregion_overlap(sys_mem, 0x60031000,
+                                            sysbus_mmio_get_region(SYS_BUS_DEVICE(ble), 0), 1);
     }
 
     /*
