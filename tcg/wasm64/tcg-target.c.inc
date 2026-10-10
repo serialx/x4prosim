@@ -2710,11 +2710,7 @@ static void tcg_out_tb_start(TCGContext *s)
     /* Followed by TCI code */
     h->tci_ptr = s->code_ptr;
 
-    /* Initialize fundamental registers */
-    tcg_wasm_out_op_idx(s, OPC_GLOBAL_GET, REG_IDX(TCG_AREG0));
-    tcg_wasm_out_op(s, OPC_I64_EQZ);
-    tcg_wasm_out_op_block(s, OPC_IF, BLOCK_NORET);
-
+    /* A shared TB can run on another CPU in the same round-robin thread. */
     ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(env));
     tcg_wasm_out_op_ldst(s, OPC_I64_LOAD, 0, ofs);
     tcg_wasm_out_op_idx(s, OPC_GLOBAL_SET, REG_IDX(TCG_AREG0));
@@ -2722,8 +2718,6 @@ static void tcg_out_tb_start(TCGContext *s)
     ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(stack));
     tcg_wasm_out_op_ldst(s, OPC_I64_LOAD, 0, ofs);
     tcg_wasm_out_op_idx(s, OPC_GLOBAL_SET, REG_IDX(TCG_REG_CALL_STACK));
-    tcg_wasm_out_op(s, OPC_END);
-
     ofs = tcg_wasm_out_get_ctx(s, CTX_OFFSET(do_init));
     tcg_wasm_out_op_ldst(s, OPC_I32_LOAD, 0, ofs);
     tcg_wasm_out_op_const(s, OPC_I32_CONST, 0);
