@@ -27,7 +27,7 @@ h2 { font-size: 16px; margin-top: 0; }
 .sd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .sd-head h2 { margin: 0; }
 #sd-info { font-size: 13px; color: #52645d; }
-#sd-info.error, #sd-error { color: #a32d2d; }
+#sd-info.error, #sd-error, #sd-save.error { color: #a32d2d; }
 #sd-error { font-size: 13px; margin: 8px 0 0; min-height: 0; }
 #sd-error:empty { display: none; }
 #sd-path { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 10px 0; font-size: 14px; min-height: 28px; }

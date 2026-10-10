@@ -7,6 +7,7 @@ let frame, bootData, pending = false, running = false;
 // The page owns the SD image while the emulator is not running; the runtime
 // iframe owns it (MEMFS /sd.img) from boot until the stop snapshot returns it.
 let sdImage = null, sdLoading = null;
+let sdSaving = 0, sdSnapshotPending = false;
 let milestones = 0, startedAt;
 const held = new Set();
 const bindings = {Back: 'Backspace', Confirm: 'Enter', Left: 'ArrowLeft',
@@ -144,24 +145,62 @@ async function prepareFlash(input) {
 
 /* SD card image ownership. */
 const defaultSD = () => params.get('sd') || 'blank-sd.img';
-async function loadSD(source) {
+function sdSaveStatus(text, error = false) {
+    $('sd-save').textContent = text;
+    $('sd-save').classList.toggle('error', error);
+}
+async function saveSD(bytes) {
+    const revision = ++sdSaving;
+    sdSaveStatus('Saving SD card in this browser…');
+    try {
+        await sdStore.save(bytes);
+        if (revision === sdSaving) sdSaveStatus('SD card saved in this browser.' +
+            (running ? ' Device changes save every 10 seconds; Stop saves now.' : ' Safe to refresh.'));
+    } catch (error) {
+        if (revision === sdSaving) sdSaveStatus(`Could not save SD card: ${error.message} Download the SD image to keep changes.`, true);
+    }
+}
+function autosaveSD() {
+    if (!running || sd.busy || sdSnapshotPending || $('stop').disabled) return;
+    sdSnapshotPending = true;
+    post({type: 'autosave'});
+}
+setInterval(autosaveSD, 10000);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') autosaveSD();
+});
+function loadSD(source, restore = false) {
     // source: a File from the picker or a same-origin URL.
     sdImage = null; sd.ready = false;
+    $('sd').disabled = true;
     $('download').disabled = true;
     sdStatus('Loading SD image…'); sdClear();
     sdLoading = (async () => {
-        const buffer = source instanceof File ? await source.arrayBuffer() : await fetchImage(source);
-        if (!buffer.byteLength || buffer.byteLength % 512) {
-            throw new Error('SD image must contain a whole number of 512-byte sectors.');
+        try {
+            let saved = null, restoreFailed = false;
+            if (restore) {
+                try { saved = await sdStore.load(); }
+                catch (error) {
+                    restoreFailed = true;
+                    sdSaveStatus(`Could not restore the saved SD card: ${error.message} Using a temporary card.`, true);
+                }
+            }
+            const buffer = saved || new Uint8Array(source instanceof File ? await source.arrayBuffer() : await fetchImage(source));
+            if (!buffer.byteLength || buffer.byteLength % 512) {
+                throw new Error('SD image must contain a whole number of 512-byte sectors.');
+            }
+            sdImage = buffer;
+            if (saved) sdSaveStatus('Saved SD card restored from this browser.');
+            else if (!restoreFailed) await saveSD(sdImage);
+            adoptSD();
+        } catch (error) {
+            sdStatus(error.message, true); append(`SD image: ${error.message}`);
+        } finally {
+            sdLoading = null;
+            $('sd').disabled = pending || !!frame;
         }
-        return new Uint8Array(buffer);
     })();
-    try {
-        sdImage = await sdLoading;
-        adoptSD();
-    } catch (error) {
-        sdStatus(error.message, true); append(`SD image: ${error.message}`);
-    } finally { sdLoading = null; }
+    return sdLoading;
 }
 function adoptSD() {
     // Called whenever the page (re)gains the image: load, failed boot, stop.
@@ -247,18 +286,24 @@ window.addEventListener('message', ({source, origin, data}) => {
     }
     if (data.type === 'sd-result') sdResult(data);
     if (data.type === 'snapshot') {
+        const saved = saveSD(data.bytes);
+        if (data.action === 'autosave') {
+            saved.finally(() => { sdSnapshotPending = false; });
+            return;
+        }
         if (data.action === 'download') {
             saveBlob(data.bytes, 'sd.img');
             for (const id of ['download', 'reset', 'stop']) $(id).disabled = false;
         } else {
             release(); frame.remove(); frame = null; running = false;
             sdAbort('The emulator stopped.');
-            $('screen').textContent = 'Stopped. The SD image is kept until you close this page.';
+            $('screen').textContent = 'Stopped. Start again to use the current SD card.';
             $('keys').replaceChildren();
             for (const id of ['reset', 'stop']) $(id).disabled = true;
             for (const id of ['start', 'flash', 'sd', 'turbo']) $(id).disabled = false;
             status('Stopped. Start resumes from a fresh boot with your current SD image.');
             sdImage = data.bytes;
+            sdSnapshotPending = false;
             adoptSD();
         }
     }
@@ -314,7 +359,7 @@ function formatSize(bytes) {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB`;
 }
 const joinPath = (dir, name) => dir === '/' ? `/${name}` : `${dir}/${name}`;
-function sdCall(op, args = {}, transfer = []) {
+async function sdCall(op, args = {}, transfer = []) {
     if (!sd.ready) return Promise.reject(new Error('The SD card is not available right now.'));
     if (frame) {
         if (!running) return Promise.reject(new Error('The emulator is still starting.'));
@@ -324,13 +369,17 @@ function sdCall(op, args = {}, transfer = []) {
             post({type: 'sd', id, op, args}, transfer);
         });
     }
-    try { return Promise.resolve(sdExecute(sdImage, op, args)); }
-    catch (error) { return Promise.reject(error); }
+    try { return sdExecute(sdImage, op, args); }
+    finally {
+        // Failed multi-file uploads may still have changed part of the card.
+        if (sdMutates(op)) await saveSD(sdImage);
+    }
 }
-function sdResult(data) {
+async function sdResult(data) {
     const call = sd.calls.get(data.id);
     sd.calls.delete(data.id);
     if (data.reset) resetting('SD card changed · ');
+    if (data.image) await saveSD(data.image);
     if (!call) return;
     if (data.ok) call.resolve(data.result);
     else call.reject(Object.assign(new Error(data.error.message), {code: data.error.code}));
@@ -532,5 +581,6 @@ sdPanel.addEventListener('drop', event => {
     sdRun(async () => sdUpload(await collected));
 });
 
-loadSD(defaultSD());
+// An explicit URL is an intentional replacement (also useful for repeatable tests).
+loadSD(defaultSD(), !params.has('sd'));
 if (params.has('flash')) start();

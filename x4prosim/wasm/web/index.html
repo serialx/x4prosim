@@ -17,8 +17,8 @@
     <label>SD image · optional <input id="sd" type="file" accept=".img"></label>
     <label><input id="turbo" type="checkbox"> Turbo (fast, not timing-accurate)</label>
     <button id="start">Start</button>
-    <p class="hint">Without an SD image, a blank 64 MiB FAT32 card is used. Use the SD card panel to add
-      books, then download the SD image to keep changes.</p>
+    <p class="hint">Your SD card is saved in this browser and restored when you return. On your first visit,
+      a blank 64 MiB FAT32 card is used. Download the SD image for a backup.</p>
   </section>
   <p id="status" role="status">Choose a flash image to begin.</p>
   <main>
@@ -49,6 +49,7 @@
           </table>
         </div>
         <p id="sd-error" role="alert"></p>
+        <p id="sd-save" class="hint" role="status">Checking for a saved SD card…</p>
         <p class="hint">Drop files or folders here to copy them into the open folder. Changing the card while
           the emulator runs resets the device so the firmware mounts the card again.</p>
       </section>
@@ -57,6 +58,7 @@
   </main>
   <script src="fat.js"></script>
   <script src="sd-ops.js"></script>
+  <script src="sd-store.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

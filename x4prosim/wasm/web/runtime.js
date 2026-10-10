@@ -7,6 +7,10 @@ let monitor = false;
 const pauses = [];
 let paused = null;
 const canvas = document.querySelector('canvas');
+// The iframe and workers are discarded on navigation. SDL's unload callback
+// cannot finish a guest shutdown here, and its wasm64 string return currently
+// trips Emscripten's BigInt-to-string conversion. Saves happen before unload.
+window.addEventListener('beforeunload', event => event.stopImmediatePropagation(), {capture: true});
 const send = (type, extra = {}) => parent.postMessage({type, ...extra}, location.origin);
 const keyCodes = {ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
     Enter: 13, Backspace: 8, Escape: 27, KeyP: 80};
@@ -54,7 +58,7 @@ function snapshot(action) {
     whilePaused(() => {
         const bytes = Module.FS.readFile('/sd.img');
         parent.postMessage({type: 'snapshot', action, bytes}, location.origin, [bytes.buffer]);
-        return action === 'download' ? 'cont' : null;
+        return action === 'stop' ? null : 'cont';
     });
 }
 // The card image QEMU reads and writes, in place (writeFile(canOwn) adopted it).
@@ -84,6 +88,11 @@ function sdOperation({id, op, args}) {
             // Anything that may have touched a sector needs a remount.
             reply.reset = sdMutates(op) && !sdPrecheckErrors.includes(error.code);
         }
+        if (reply.reset) {
+            // Save the edited card before the reset lets firmware write again.
+            reply.image = Module.FS.readFile('/sd.img');
+            transfer.push(reply.image.buffer);
+        }
         parent.postMessage(reply, location.origin, transfer);
         return reply.reset ? 'reset' : 'cont';
     });
@@ -102,7 +111,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
         }));
     } else if (data.type === 'reset') {
         command('system_reset');
-    } else if (data.type === 'download' || data.type === 'stop') {
+    } else if (data.type === 'download' || data.type === 'stop' || data.type === 'autosave') {
         snapshot(data.type);
     } else if (data.type === 'sd') {
         sdOperation(data);

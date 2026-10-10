@@ -215,13 +215,15 @@ try {
         });
     `})).identifier;
     await freshPage();
+    await picker('#sd', [path.resolve(process.env.INPUT_SD || 'build-wasm-32limit/web-dist/blank-sd.img')]);
     await listing('baseline-blank', []);
     await boot('baseline', () => click('#start'));
     const blank = await openBrowser('device-blank-browser');
     await stop();
 
-    // Reload discards firmware cache writes from the blank-card reference run.
+    // Explicitly replace the saved card to discard the reference run's cache.
     await freshPage();
+    await picker('#sd', [path.resolve(process.env.INPUT_SD || 'build-wasm-32limit/web-dist/blank-sd.img')]);
     await listing('state1-empty', []);
     assert.equal(await evaluate('document.querySelector("#sd-rows .empty").textContent'), 'Empty folder');
     await picker('#sd-files', [small, demian]);
@@ -242,6 +244,8 @@ try {
     await dialogClick(rowButton(smallName, 'remove'), 'confirm', `Delete "${smallName}"`);
     await listing('state1-final', [renamed, folder]);
     await screenshot('explorer-state1', '.sd');
+    await freshPage();
+    await listing('state1-restored', [renamed, folder]);
 
     await boot('state2', () => click('#start'));
     await click('#sd-refresh');
@@ -307,6 +311,8 @@ try {
     await dialogClick(rowButton(runningName, 'remove'), 'confirm', `Delete "${runningName}"`);
     await listing('state3-deleted', [renamed, folder]);
     await screenshot('explorer-state3', '.sd');
+    await freshPage();
+    await listing('state3-restored', [renamed, folder]);
     await boot('restarted', () => click('#start'));
     await click('#sd-refresh');
     await listing('restarted', [renamed, folder]);

@@ -67,9 +67,22 @@ Use the on-screen controls or arrows, Enter, Backspace/Esc, and P. X4 Pro also
 accepts pointer/touch input on its canvas. Reset resets the machine. Stop pauses
 the guest, copies the current SD image, and removes the iframe and its workers.
 Start then boots again with that SD image. Download SD image pauses the guest,
-copies the card, and resumes execution. Card writes are kept only in memory
-until downloaded; refresh/closing the tab loses them. Flash changes are not
-exported. Select another SD file to discard the in-memory card for the next run.
+copies the card, and resumes execution. The SD card is saved in this browser
+and restored on refresh or your next visit to the same site. File explorer
+changes save immediately; running device changes save every 10 seconds and
+when you press Stop or Download SD image. Wait for the saved status before
+refreshing. A refresh during execution can lose changes since the last save;
+Stop saves the current card. Flash changes are not exported or saved.
+
+Browser storage is local to this browser profile and site address. Clearing
+site data removes the saved card, and the browser may evict it when storage
+is scarce. Download SD image for a portable backup. If storage is unavailable
+or full, a warning appears and the card remains usable in memory. Selecting
+another SD image replaces the saved card. An explicit ?sd= URL loads that
+image instead of restoring the saved card, and saves it as the new card.
+The full image is stored atomically in IndexedDB, separately for each hosted
+application path. Avoid editing the same card in multiple tabs: the last
+completed save wins.
 
 The SD card panel is a file explorer for the in-memory card: browse folders,
 upload files (picker or drag-and-drop, folders included), create folders,
@@ -100,6 +113,14 @@ Automated acceptance (Node 22+ and Chrome; no npm dependencies):
     --user-data-dir=/tmp/x4prosim-chrome --no-first-run about:blank
   INPUT_SD=/absolute/path/to/sd.img node x4prosim/wasm/web/smoke.mjs \
     'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
+
+SD persistence acceptance uses the same server and an isolated Chrome profile
+(it replaces that profile's saved card):
+  PICKER_FLASH=/absolute/path/to/crosspoint-1.6.5-x3-x4.bin \
+    node x4prosim/wasm/web/persistence-smoke.mjs http://127.0.0.1:8000/
+It checks reloads after edits, failed saves, unavailable storage, running
+explorer edits, periodic device snapshots, Stop, and image replacement.
+Omit PICKER_FLASH to run only the checks that do not boot firmware.
 
 Official release acceptance also compares the browser-composed buffer's SHA256
 (using crypto.subtle before transfer to QEMU) with mkflash.py output:
