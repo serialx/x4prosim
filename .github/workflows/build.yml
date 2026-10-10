@@ -299,6 +299,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '26'
+      - name: Test browser FAT filesystem
+        run: node x4prosim/wasm/web/fat.test.mjs
       - name: Cache wasm dependencies
         uses: actions/cache@v5
         with:
