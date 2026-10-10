@@ -40,11 +40,17 @@ def page(entries):
     return bytes(p)
 
 
-out, size, ns = sys.argv[1], int(sys.argv[2], 0), sys.argv[3]
-entries = [entry(0, ns, 1)]
-for kv in sys.argv[4:]:
-    k, v = kv.split("=")
-    entries.append(entry(1, k, int(v, 0)))
-img = page(entries)
-with open(out, "wb") as f:
-    f.write(img + b"\xff" * (size - len(img)))
+def image(size, namespace, values):
+    """Return the same seeded partition used by the command-line tool."""
+    if size < 4096 or size % 4096:
+        raise ValueError("NVS size must be a positive multiple of 4096")
+    entries = [entry(0, namespace, 1)]
+    entries.extend(entry(1, key, value) for key, value in values.items())
+    return page(entries) + b"\xff" * (size - 4096)
+
+
+if __name__ == "__main__":
+    out, size, ns = sys.argv[1], int(sys.argv[2], 0), sys.argv[3]
+    values = dict(kv.split("=") for kv in sys.argv[4:])
+    with open(out, "wb") as f:
+        f.write(image(size, ns, {k: int(v, 0) for k, v in values.items()}))
