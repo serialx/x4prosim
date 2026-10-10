@@ -3,7 +3,7 @@
  * node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
  * Required for X3: INPUT_SD (local source card, to compare the download).
  * Optional: CDP_PORT, CHROME_PID, EVIDENCE_DIR, TIMEOUT (seconds),
- * WEB_MACHINE=x4pro, EXPECT_SERVICE_WORKER=1, PICKER_FLASH/PICKER_SD.
+ * WEB_MACHINE=x4pro, EXPECT_SERVICE_WORKER=1, PICKER_FLASH/PICKER_SD, RELEASE_APP (local app for a ?flash= URL).
  * CPU_PROFILE=1 captures worker profiles split at Home; BENCH_ONLY=1 stops
  * after settled; REFERENCE_PPM checks an exact panel screendump.
  * REFERENCE_LOG also checks the first eight wait lines with sleep=off.
@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 async function sha256(file) {
     const hash = createHash('sha256');
@@ -21,6 +22,20 @@ async function sha256(file) {
 }
 const evidence = process.env.EVIDENCE_DIR || 'build-wasm/evidence';
 fs.mkdirSync(evidence, {recursive: true});
+const releaseApp = process.env.RELEASE_APP ||
+    (process.env.PICKER_FLASH && fs.statSync(process.env.PICKER_FLASH).size !== 0x1000000 ? process.env.PICKER_FLASH : null);
+let expectedFlashHash;
+if (releaseApp) {
+    const output = path.resolve(evidence, 'composed-reference.bin');
+    const composer = fileURLToPath(new URL('../../mkflash.py', import.meta.url));
+    try {
+        execFileSync(process.env.PYTHON || 'python3', [composer, path.resolve(releaseApp), output]);
+        expectedFlashHash = await sha256(output);
+    } finally {
+        fs.rmSync(output, {force: true});
+    }
+}
+let observerScript;
 const pages = await (await fetch(`http://127.0.0.1:${process.env.CDP_PORT || 9224}/json`)).json();
 const page = pages.find(page => page.type === 'page');
 const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -122,7 +137,13 @@ smoke: try {
     await call('Browser.setDownloadBehavior', {behavior: 'allow', downloadPath: downloads});
     await call('Emulation.setDeviceMetricsOverride', {width: 1400, height: 1380, deviceScaleFactor: 1, mobile: false});
     const start = Date.now();
-    await call('Page.addScriptToEvaluateOnNewDocument', {source: String.raw`
+    observerScript = (await call('Page.addScriptToEvaluateOnNewDocument', {source: String.raw`
+        window.addEventListener('x4prosim-flash-ready', ({detail}) => {
+            window.smokeFlash = {composed: detail.composed, machine: detail.machine,
+                status: document.querySelector('#status').textContent};
+            window.smokeFlashHash = crypto.subtle.digest('SHA-256', detail.flash).then(hash =>
+                Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join(''));
+        });
         window.addEventListener('message', ({origin, data}) => {
             if (origin !== location.origin || data.type !== 'log') return;
             window.smokeLogLines = (window.smokeLogLines || 0) + 1;
@@ -138,7 +159,7 @@ smoke: try {
                 console.debug('smoke:settled');
             }
         });
-    `});
+    `})).identifier;
     await call('Page.navigate', {url: process.argv[2]});
     // Do not count exceptions from the previous navigation.
     errors.length = 0;
@@ -155,6 +176,17 @@ smoke: try {
         measurements.file_pickers = true;
     }
     await waitFor('crossOriginIsolated && document.querySelector("iframe")');
+    if (releaseApp) {
+        measurements.flash = await waitFor('window.smokeFlash');
+        measurements.flash.sha256 = await evaluate('window.smokeFlashHash');
+        measurements.flash.python_sha256 = expectedFlashHash;
+        if (!measurements.flash.composed || !measurements.flash.status.includes('Composed 16 MiB flash')) {
+            throw new Error('Release app did not report flash composition in the status text');
+        }
+        if (measurements.flash.sha256 !== expectedFlashHash) {
+            throw new Error('Browser-composed flash differs from mkflash.py output');
+        }
+    }
     measurements.turbo = await evaluate('document.querySelector("#turbo").checked');
     if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') !== '0') ||
         !await evaluate('document.querySelector("#turbo").disabled')) {
@@ -303,5 +335,6 @@ smoke: try {
     throw error;
 } finally {
     clearInterval(sampler);
+    if (observerScript) await call('Page.removeScriptToEvaluateOnNewDocument', {identifier: observerScript});
     ws.close();
 }

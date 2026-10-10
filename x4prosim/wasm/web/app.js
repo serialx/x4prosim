@@ -68,6 +68,40 @@ async function fetchImage(url) {
     if (!response.ok) throw new Error(`Cannot load ${url}: HTTP ${response.status}`);
     return response.arrayBuffer();
 }
+async function prepareFlash(input) {
+    const bytes = new Uint8Array(input);
+    if (bytes.length === 0x1000000) {
+        return {flash: input, machine: bytes[12] === 5 ? 'x3' : 'x4pro', composed: false};
+    }
+    if (bytes.length < 24 || bytes[0] !== 0xe9) {
+        throw new Error('Choose an official CrossPoint release .bin or a 16 MiB flash dump (16777216 bytes).');
+    }
+    const chip = bytes[12] | bytes[13] << 8;
+    if (chip !== 5 && chip !== 9) {
+        throw new Error(`Unsupported ESP chip ID ${chip}; expected ESP32-C3 (5) or ESP32-S3 (9).`);
+    }
+    if (bytes.length > 0x640000) {
+        throw new Error('App image exceeds the CrossPoint app0 partition (6553600 bytes).');
+    }
+    const machine = chip === 5 ? 'x3' : 'x4pro';
+    status(`Composing 16 MiB flash image for ${machine === 'x3' ? 'X3' : 'X4 Pro'}…`);
+    const [boot, partitions, nvs] = await Promise.all([
+        fetchImage(`bootloader-${chip === 5 ? 'esp32c3' : 'esp32s3'}.bin`),
+        fetchImage('partitions.bin'),
+        chip === 5 ? fetchImage('nvs-x3.bin') : null
+    ]);
+    if (boot.byteLength < 24 || boot.byteLength > 0x8000 ||
+        new Uint8Array(boot)[0] !== 0xe9 || new Uint8Array(boot)[12] !== chip ||
+        partitions.byteLength !== 0xc00 || (nvs && nvs.byteLength !== 0x5000)) {
+        throw new Error('Invalid bundled boot assets. Run package-web.sh to regenerate the distribution.');
+    }
+    const flash = new Uint8Array(0x1000000).fill(0xff);
+    flash.set(new Uint8Array(boot), 0);
+    flash.set(new Uint8Array(partitions), 0x8000);
+    if (nvs) flash.set(new Uint8Array(nvs), 0x9000);
+    flash.set(bytes, 0x10000);
+    return {flash: flash.buffer, machine, composed: true};
+}
 async function start() {
     if (frame || pending) return;
     pending = true;
@@ -77,11 +111,14 @@ async function start() {
     try {
         if (!crossOriginIsolated) throw new Error('SharedArrayBuffer needs isolation headers. Serve this folder with serve.py on localhost or HTTPS.');
         status('Loading images…');
-        const flash = $('flash').files[0] ? await $('flash').files[0].arrayBuffer() :
+        const input = $('flash').files[0] ? await $('flash').files[0].arrayBuffer() :
             params.has('flash') ? await fetchImage(params.get('flash')) : null;
-        if (!flash) throw new Error('Choose a 16 MiB flash image.');
-        if (flash.byteLength !== 16 * 1024 * 1024) throw new Error('Flash image must be exactly 16 MiB (16777216 bytes).');
-        const machine = new Uint8Array(flash)[12] === 5 ? 'x3' : 'x4pro';
+        if (!input) throw new Error('Choose an official CrossPoint release .bin or a 16 MiB flash dump.');
+        const {flash, machine, composed} = await prepareFlash(input);
+        const composition = composed ? 'Composed 16 MiB flash from release app · ' : '';
+        if (composed) { status(composition + 'loading SD image…'); append(composition.trim()); }
+        // Observers can inspect the exact bytes before ownership passes to the runtime.
+        window.dispatchEvent(new CustomEvent('x4prosim-flash-ready', {detail: {flash, machine, composed}}));
         const [sd, rom] = await Promise.all([
             savedSD || ($('sd').files[0] ? $('sd').files[0].arrayBuffer() : fetchImage(params.get('sd') || 'blank-sd.img')),
             fetchImage(machine === 'x3' ? 'esp32c3-rom.bin' : 'esp32s3_rev0_rom.bin')
@@ -94,7 +131,7 @@ async function start() {
         frame.title = `${machine === 'x3' ? 'X3' : 'X4 Pro'} display`;
         frame.src = 'runtime.html';
         $('screen').replaceChildren(frame);
-        status(`Booting ${machine === 'x3' ? 'X3 (ESP32-C3)' : 'X4 Pro (ESP32-S3)'}…`);
+        status(`${composition}Booting ${machine === 'x3' ? 'X3 (ESP32-C3)' : 'X4 Pro (ESP32-S3)'}…`);
     } catch (error) { fail(error.message); }
     finally { pending = false; }
 }

@@ -10,7 +10,10 @@
 <body>
   <header><h1>x4prosim</h1><p>Xteink X3 and X4 Pro · WebAssembly emulator</p></header>
   <section class="loader" aria-label="Images">
-    <label>Flash image · 16 MiB <input id="flash" type="file" accept=".bin"></label>
+    <label>Flash image · official CrossPoint release .bin or 16 MiB flash dump <input id="flash" type="file" accept=".bin"></label>
+    <p class="hint">Choose <code>crosspoint-&lt;ver&gt;-x3-x4.bin</code> for X3 or
+      <code>crosspoint-&lt;ver&gt;-x4pro.bin</code> for X4 Pro from the
+      <a href="https://github.com/crosspoint-reader/crosspoint-reader/releases">CrossPoint releases</a>.</p>
     <label>SD image · optional <input id="sd" type="file" accept=".img"></label>
     <label><input id="turbo" type="checkbox" checked> Turbo (fast, not timing-accurate)</label>
     <button id="start">Start</button>

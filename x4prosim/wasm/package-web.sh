@@ -18,6 +18,21 @@ for arch in riscv32 xtensa; do
     fi
 done
 cp "$ROOT/pc-bios/esp32c3-rom.bin" "$ROOT/pc-bios/esp32s3_rev0_rom.bin" "$DEST/"
+cp "$ROOT"/x4prosim/boot/bootloader-*.bin "$DEST/"
+cp "$ROOT/x4prosim/boot/LICENSE" "$DEST/bootloader.LICENSE.txt"
+cp "$ROOT/x4prosim/boot/LICENSE.partitions" "$DEST/partitions.LICENSE.txt"
+python3 - "$ROOT" "$DEST" <<'PYBOOT'
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from x4prosim import mkflash, mknvs
+out = Path(sys.argv[2])
+provenance = (mkflash.BOOT_DIR / 'README.md').read_text()
+(out / 'boot-provenance.md').write_text(provenance.replace('(LICENSE)', '(bootloader.LICENSE.txt)')
+                                       .replace('(LICENSE.partitions)', '(partitions.LICENSE.txt)'))
+(out / 'partitions.bin').write_bytes(mkflash.partition_table())
+(out / 'nvs-x3.bin').write_bytes(mknvs.image(0x5000, 'cphw', {'dev_det': 2}))
+PYBOOT
 if [ ! -f "$DEST/blank-sd.img" ]; then
     python3 "$ROOT/x4prosim/mksd.py" "$DEST/blank-sd.img" 64
 fi
