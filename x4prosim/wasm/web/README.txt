@@ -54,6 +54,14 @@ pthread even while the e-ink screen is idle. The default parallel text console
 is disabled because Emscripten SDL has one canvas. Wi-Fi networking is disabled as in the
 Node wasm launcher.
 
+The canvas and runtime iframe retain the native panel resolution: 528x792 for
+X3 and 480x800 for X4 Pro. The page scales the iframe in whole physical-pixel
+multiples, adapting to browser zoom, monitor pixel density, and available width.
+On a 2x Retina display at 100% zoom, each panel pixel occupies a 2x2 block.
+If a narrow window cannot fit even one physical pixel per panel pixel, the
+device section scrolls horizontally. Avoid percentage sizing on the canvas:
+SDL adopts that size and resamples the framebuffer, producing moire in dithering.
+
 Use the on-screen controls or arrows, Enter, Backspace/Esc, and P. X4 Pro also
 accepts pointer/touch input on its canvas. Reset resets the machine. Stop pauses
 the guest, copies the current SD image, and removes the iframe and its workers.
@@ -108,6 +116,9 @@ checks Down and keyboard Up change the panel, and taps the Library row on the
 blank-card Home screen. The touch capture is web-x4pro.png; Stop must remove
 the runtime. Other firmware needs equivalent CrossPoint log milestones.
 A blank 16 MiB flash still tests only ROM boot and pointer delivery.
+Both device tests also require native canvas and iframe dimensions at pixel
+ratios 1, 1.25, 1.5, 2, and 3 across desktop and narrow viewports, with whole
+physical-pixel display scales. The X4 Pro touch check runs at fractional DPR.
 
 Test the official X4 Pro app directly through the picker with the blank card:
   WEB_MACHINE=x4pro PICKER_FLASH=/absolute/path/to/crosspoint-1.6.5-x4pro.bin \

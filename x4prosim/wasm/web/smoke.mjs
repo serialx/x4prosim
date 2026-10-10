@@ -113,6 +113,39 @@ async function screenshot(name) {
 }
 const consoleText = 'document.querySelector("#console")?.textContent';
 const canvas = 'document.querySelector("iframe").contentDocument.querySelector("canvas")';
+async function checkDisplaySizes(width, height) {
+    const results = [];
+    // Exercise Retina, fractional browser zoom, narrow layouts, and a viewport
+    // too small for 1x (which must scroll rather than downsample the panel).
+    for (const [viewport, dpr] of [[1400, 1], [1400, 2], [900, 1.5], [390, 3], [270, 1], [1400, 1.25]]) {
+        await call('Emulation.setDeviceMetricsOverride', {
+            width: viewport, height: 1380, deviceScaleFactor: dpr, mobile: false
+        });
+        await waitFor(`innerWidth === ${viewport} && devicePixelRatio === ${dpr}`);
+        // Let ResizeObserver and the DPR media query settle, including SDL's
+        // asynchronous response to any accidental iframe/canvas resize.
+        await delay(500);
+        const size = await evaluate(`(() => {
+            const f = document.querySelector('iframe');
+            const c = f.contentDocument.querySelector('canvas');
+            const r = f.getBoundingClientRect();
+            return {width: c.width, height: c.height,
+                viewportWidth: f.contentWindow.innerWidth, viewportHeight: f.contentWindow.innerHeight,
+                physicalWidth: r.width * devicePixelRatio, physicalHeight: r.height * devicePixelRatio,
+                rendering: f.contentWindow.getComputedStyle(c).imageRendering};
+        })()`);
+        const scale = size.physicalWidth / width;
+        if (size.width !== width || size.height !== height ||
+            size.viewportWidth !== width || size.viewportHeight !== height ||
+            size.rendering !== 'pixelated' || scale < 0.9999 ||
+            Math.abs(scale - Math.round(scale)) > 0.0001 ||
+            Math.abs(size.physicalHeight / height - scale) > 0.0001) {
+            throw new Error(`Panel resampled at viewport=${viewport}, DPR=${dpr}: ${JSON.stringify(size)}`);
+        }
+        results.push({viewport, dpr, ...size});
+    }
+    return results;
+}
 const measurements = {host_cpu: os.cpus()[0].model, host_logical_cpus: os.cpus().length,
     host_ram_bytes: os.totalmem(), url: process.argv[2],
     browser: await call('Browser.getVersion')};
@@ -256,18 +289,18 @@ smoke: try {
             measurements.rom_s = (Date.now() - start) / 1000;
         }
         measurements.canvas = await evaluate(`({width:${canvas}.width,height:${canvas}.height})`);
-        if (measurements.canvas.width <= 0 ||
-            Math.abs(measurements.canvas.width / measurements.canvas.height - 480 / 800) > 0.005) {
-            throw new Error('X4 Pro panel is not portrait');
+        if (measurements.canvas.width !== 480 || measurements.canvas.height !== 800) {
+            throw new Error('X4 Pro canvas must retain the native 480x800 panel');
         }
+        measurements.display_sizes = await checkDisplaySizes(480, 800);
         const beforeTouch = await evaluate(`${canvas}.toDataURL()`);
         const logBeforeTouch = await evaluate(consoleText);
         const point = await evaluate(`(() => {
             const frame = document.querySelector('iframe');
             const f = frame.getBoundingClientRect();
-            const r = frame.contentDocument.querySelector('canvas').getBoundingClientRect();
             // Blank-card Home: Library row, in portrait panel coordinates.
-            return {x: f.x + r.x + r.width / 2, y: f.y + r.y + r.height * 420 / 800};
+            // The iframe can be scaled independently of its native viewport.
+            return {x: f.x + f.width / 2, y: f.y + f.height * 420 / 800};
         })()`);
         await call('Input.dispatchMouseEvent', {type: 'mouseMoved', ...point});
         await call('Input.dispatchMouseEvent', {type: 'mousePressed', button: 'left', clickCount: 1, ...point});
@@ -287,13 +320,13 @@ smoke: try {
         measurements.home_milestone_s = await waitFor('window.bootTimeSeconds');
         measurements.page_load_to_home_s = ((await waitFor('window.smokeHomeEpoch')) - start) / 1000;
         measurements.canvas = await evaluate(`({width:${canvas}.width,height:${canvas}.height})`);
-        if (measurements.canvas.width <= 0 ||
-            Math.abs(measurements.canvas.width / measurements.canvas.height - 528 / 792) > 0.005) {
-            throw new Error('X3 panel is not portrait');
+        if (measurements.canvas.width !== 528 || measurements.canvas.height !== 792) {
+            throw new Error('X3 canvas must retain the native 528x792 panel');
         }
         console.log(`Home milestone: ${measurements.home_milestone_s.toFixed(3)} s`);
         // As in smoke.sh, wait for thumbnail generation to settle before input.
         await waitFor(`${consoleText}?.includes('[MEM]')`);
+        measurements.display_sizes = await checkDisplaySizes(528, 792);
         measurements.settled_s = ((await waitFor('window.smokeSettledEpoch')) - start) / 1000;
         measurements.home_to_settled_s = measurements.settled_s - measurements.page_load_to_home_s;
         measurements.log_lines = await evaluate('window.smokeLogLines');

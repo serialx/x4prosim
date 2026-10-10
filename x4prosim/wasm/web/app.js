@@ -10,6 +10,30 @@ const bindings = {Back: 'Backspace', Confirm: 'Enter', Left: 'ArrowLeft',
     Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Power: 'KeyP'};
 const post = (data, transfer = []) => frame?.contentWindow.postMessage(data, location.origin, transfer);
 const status = text => { $('status').textContent = text; };
+function resizeScreen() {
+    if (!frame) return;
+    const dpr = window.devicePixelRatio || 1;
+    const width = Number(frame.width), height = Number(frame.height);
+    const available = document.querySelector('.device').clientWidth - 18;
+    // Keep SDL's viewport at the panel resolution. Resizing it to the layout
+    // resamples the framebuffer before the browser ever draws the canvas.
+    // Prefer native CSS size, fitting smaller screens in whole physical pixels.
+    // If even 1x cannot fit, the device section scrolls instead of losing pixels.
+    const pixels = Math.max(1, Math.min(Math.floor(dpr), Math.floor(available * dpr / width)));
+    const scale = pixels / dpr;
+    $('screen').style.width = `${width * scale}px`;
+    $('screen').style.height = `${height * scale}px`;
+    frame.style.transform = `scale(${scale})`;
+}
+new ResizeObserver(resizeScreen).observe(document.querySelector('.device'));
+window.addEventListener('resize', resizeScreen);
+function watchPixelRatio() {
+    // Moving between monitors can change DPR without changing the layout width.
+    matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change', () => {
+        resizeScreen(); watchPixelRatio();
+    }, {once: true});
+}
+watchPixelRatio();
 function append(line) {
     $('console').textContent += line + '\n';
     if ($('console').textContent.length > 1000000) {
@@ -128,9 +152,12 @@ async function start() {
         buttons(machine);
         $('screen').style.aspectRatio = machine === 'x3' ? '528 / 792' : '480 / 800';
         frame = document.createElement('iframe');
+        frame.width = machine === 'x3' ? '528' : '480';
+        frame.height = machine === 'x3' ? '792' : '800';
         frame.title = `${machine === 'x3' ? 'X3' : 'X4 Pro'} display`;
         frame.src = 'runtime.html';
         $('screen').replaceChildren(frame);
+        resizeScreen();
         status(`${composition}Booting ${machine === 'x3' ? 'X3 (ESP32-C3)' : 'X4 Pro (ESP32-S3)'}…`);
     } catch (error) { fail(error.message); }
     finally { pending = false; }
