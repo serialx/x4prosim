@@ -356,7 +356,11 @@ static void uc8179_run_frames(Uc8179State *s, double now)
         timer_del(&s->anim_timer);
         s->t_refresh = s->t_drift = s->anim_t0 + s->anim_n * dt;
     } else {
-        timer_mod(&s->anim_timer, (s->anim_t0 + (s->anim_f + 1) * dt) * 1e9);
+        /* Rounding down can rearm an expired timer before a frame is due. */
+        int64_t deadline = ceil((s->anim_t0 + (s->anim_f + 1) * dt) * 1e9);
+
+        timer_mod(&s->anim_timer,
+                  MAX(deadline, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 1));
     }
 }
 

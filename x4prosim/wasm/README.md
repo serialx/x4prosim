@@ -22,7 +22,8 @@ be reused. Native Memory64 needs Chrome 133+ or Firefox 134+, not Safari;
 the lowered mode is the portable option. Emulator acceptance covers Chrome
 155 and Node 26, not Firefox/Safari.
 
-`smoke.sh flash.bin sd.img` verifies X3 Home, JIT activity and X4 Pro ROM/panel;
+`smoke.sh flash.bin sd.img` detects X3 or X4 Pro and verifies Home, settled
+startup, JIT activity and the panel; X3 also checks the X4 Pro blank-flash ROM.
 `smoke.sh --rom-only` needs no firmware. Smoke copies both input images;
 `run-node.sh` copies flash but writes the supplied SD directly. Use copies.
 Evidence defaults to `build-wasm/evidence/smoke` in either mode.
@@ -38,8 +39,8 @@ App images are composed in browser memory with the bundled boot assets;
 no esptool or PlatformIO is needed. Full flash dumps pass through unchanged.
 The browser smoke test accepts `PICKER_FLASH=<app.bin>` or
 `RELEASE_APP=<local-app.bin>` for a URL input, verifies composition status,
-and compares SHA256 against `mkflash.py` output before checking X3 Home and
-controls. See [web/README.txt](web/README.txt) for complete commands.
+and compares SHA256 against `mkflash.py` output before checking Home and controls. Set
+`WEB_MACHINE=x4pro` for X4 Pro firmware and its Library touch check. See [web/README.txt](web/README.txt) for complete commands.
 
 `WASM_SYSROOT=/absolute/path/to/sysroot-wasm64` lets both build scripts reuse
 compatible dependencies. `WASM_JIT_STATS=1` enables Node JIT module counts;
@@ -65,5 +66,9 @@ Final M5 Max three-run medians (`MEMORY64=2`, seconds):
 Accurate mode beats guest time to Home (3.250 s), but misses settled startup
 (about 10.05 s); turbo beats both by changing delays. Both address modes build
 and pass smoke. The hosted page is <https://serialx.github.io/x4prosim/>.
-Safari/Firefox and X4 Pro firmware were not executed; X4 Pro coverage is
-ROM/panel only.
+Official CrossPoint 1.6.5 X4 Pro now reaches Home in native, Node and Chrome,
+including accurate and turbo modes; the browser verifies Down/Up and a pointer
+tap into Library. This requires the shared-TB CPU context reload, UC8179 timer
+rounding and SDL logical-coordinate fixes in the current source. S3 deep-sleep
+wake remains unsupported. This X4 Pro verification used `MEMORY64=2`;
+`MEMORY64=1` and Safari/Firefox were not retested with these fixes.

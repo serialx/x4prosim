@@ -101,8 +101,29 @@ the GPU in Chrome acceptance runs. Evidence defaults to build-wasm/evidence. Set
 INPUT_SD to the input card's local path to verify the download contains guest
 writes, CHROME_PID to the isolated browser's main PID for sampled aggregate CPU/RSS,
 CDP_PORT to use another debug port, and TIMEOUT to change the 600-second limit.
-WEB_MACHINE=x4pro tests a blank 16 MiB flash's ROM path and captures its panel;
-an X4 Pro firmware image is not included. Keep downloaded firmware private.
+WEB_MACHINE=x4pro detects an ESP32-S3 firmware header (chip ID 9 at the
+bootloader or app offset) and waits for the third 8179_DRF refresh plus the
+following [MEM] checkpoint. It saves web-x4pro-home.png and web-x4pro.ppm,
+checks Down and keyboard Up change the panel, and taps the Library row on the
+blank-card Home screen. The touch capture is web-x4pro.png; Stop must remove
+the runtime. Other firmware needs equivalent CrossPoint log milestones.
+A blank 16 MiB flash still tests only ROM boot and pointer delivery.
+
+Test the official X4 Pro app directly through the picker with the blank card:
+  WEB_MACHINE=x4pro PICKER_FLASH=/absolute/path/to/crosspoint-1.6.5-x4pro.bin \
+    node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/'
+This also checks composition against mkflash.py. For a URL, set RELEASE_APP
+to the local app and use ?flash=crosspoint-1.6.5-x4pro.bin&sd=blank-sd.img.
+
+Node takes a composed flash image:
+  python3 x4prosim/mkflash.py crosspoint-1.6.5-x4pro.bin /tmp/x4pro.bin
+  x4prosim/wasm/smoke.sh /tmp/x4pro.bin build-wasm-32limit/web-dist/blank-sd.img
+
+For Node, smoke.sh /tmp/x4pro.bin sd.img detects the same chip and tests X4 Pro
+Home, settled [MEM], JIT activity and a nonblank 480x800 panel. --turbo also
+compares against a fresh native turbo capture. --rom-only and X3 firmware
+smoke retain their ROM and X3 coverage. Firmware is never included in the
+package; remove temporary firmware copies before distributing web-dist.
 
 For header-less static hosting, run:
   python3 -m http.server 8001 --bind 127.0.0.1 \

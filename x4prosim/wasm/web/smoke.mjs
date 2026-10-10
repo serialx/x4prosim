@@ -147,7 +147,7 @@ smoke: try {
         window.addEventListener('message', ({origin, data}) => {
             if (origin !== location.origin || data.type !== 'log') return;
             window.smokeLogLines = (window.smokeLogLines || 0) + 1;
-            if (/Wait complete:\s+(?:8279|X3)_DRF/.test(data.line)) {
+            if (/Wait complete:\s+(?:8179|8279|X3)_DRF/.test(data.line)) {
                 window.smokeRefreshes = (window.smokeRefreshes || 0) + 1;
                 if (window.smokeRefreshes === 3) {
                     window.smokeHomeEpoch = Date.now();
@@ -213,21 +213,72 @@ smoke: try {
     })()`);
     if (!measurements.webgl) throw new Error('WebGL must be available for this acceptance test');
     if (process.env.WEB_MACHINE === 'x4pro') {
-        await waitFor(`${consoleText}?.includes('invalid header: 0x00000000')`);
-        await delay(2000);
-        measurements.rom_s = (Date.now() - start) / 1000;
+        measurements.firmware = await evaluate(`(() => {
+            const bytes = document.querySelector('iframe').contentWindow.Module.FS.readFile('/flash.bin');
+            return [0, 0x10000].some(offset => bytes[offset] === 0xe9 &&
+                bytes[offset + 12] === 9 && bytes[offset + 13] === 0);
+        })()`);
+        if (measurements.firmware) {
+            measurements.home_milestone_s = await waitFor('window.bootTimeSeconds');
+            measurements.page_load_to_home_s = ((await waitFor('window.smokeHomeEpoch')) - start) / 1000;
+            measurements.settled_s = ((await waitFor('window.smokeSettledEpoch')) - start) / 1000;
+            measurements.home_to_settled_s = measurements.settled_s - measurements.page_load_to_home_s;
+            await screenshot('web-x4pro-home.png');
+            await evaluate(`document.querySelector('iframe').contentWindow.command('screendump /smoke.ppm panel')`);
+            await waitFor(`document.querySelector('iframe').contentWindow.Module.FS.analyzePath('/smoke.ppm').exists`);
+            const bytes = await evaluate(`Array.from(document.querySelector('iframe').contentWindow.Module.FS.readFile('/smoke.ppm'))`);
+            const ppm = Buffer.from(bytes);
+            fs.writeFileSync(path.join(evidence, 'web-x4pro.ppm'), ppm);
+            measurements.ppm_sha256 = createHash('sha256').update(ppm).digest('hex');
+            if (process.env.REFERENCE_PPM && !ppm.equals(fs.readFileSync(process.env.REFERENCE_PPM))) {
+                throw new Error('X4 Pro browser PPM differs from reference');
+            }
+            const before = await evaluate(`${canvas}.toDataURL()`);
+            await evaluate(`Array.from(document.querySelectorAll('#keys button')).find(b => b.textContent === 'Down').click()`);
+            await waitFor(`${canvas}.toDataURL() !== ${JSON.stringify(before)}`);
+            await delay(1500);
+            await screenshot('web-x4pro-down.png');
+            measurements.down_changed_canvas = true;
+            const afterDown = await evaluate(`${canvas}.toDataURL()`);
+            await evaluate(`${canvas}.focus({preventScroll:true})`);
+            await call('Input.dispatchKeyEvent', {type: 'keyDown', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38});
+            await delay(measurements.turbo ? 40 : 150);
+            await call('Input.dispatchKeyEvent', {type: 'keyUp', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38});
+            await waitFor(`${canvas}.toDataURL() !== ${JSON.stringify(afterDown)}`);
+            await delay(1500);
+            await screenshot('web-x4pro-up.png');
+            measurements.keyboard_up_changed_canvas = true;
+        } else {
+            await waitFor(`${consoleText}?.includes('invalid header: 0x00000000')`);
+            await delay(2000);
+            measurements.rom_s = (Date.now() - start) / 1000;
+        }
         measurements.canvas = await evaluate(`({width:${canvas}.width,height:${canvas}.height})`);
         if (measurements.canvas.width <= 0 ||
             Math.abs(measurements.canvas.width / measurements.canvas.height - 480 / 800) > 0.005) {
             throw new Error('X4 Pro panel is not portrait');
         }
+        const beforeTouch = await evaluate(`${canvas}.toDataURL()`);
+        const logBeforeTouch = await evaluate(consoleText);
         const point = await evaluate(`(() => {
-            const r = document.querySelector('iframe').getBoundingClientRect();
-            return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+            const frame = document.querySelector('iframe');
+            const f = frame.getBoundingClientRect();
+            const r = frame.contentDocument.querySelector('canvas').getBoundingClientRect();
+            // Blank-card Home: Library row, in portrait panel coordinates.
+            return {x: f.x + r.x + r.width / 2, y: f.y + r.y + r.height * 420 / 800};
         })()`);
         await call('Input.dispatchMouseEvent', {type: 'mouseMoved', ...point});
         await call('Input.dispatchMouseEvent', {type: 'mousePressed', button: 'left', clickCount: 1, ...point});
+        // Turbo advances guest hold timers faster than wall time.
+        await delay(measurements.turbo ? 40 : 150);
         await call('Input.dispatchMouseEvent', {type: 'mouseReleased', button: 'left', clickCount: 1, ...point});
+        if (measurements.firmware) {
+            await waitFor(`${consoleText}?.slice(${logBeforeTouch.length}).includes('[LIB]')`);
+            await waitFor(`${canvas}.toDataURL() !== ${JSON.stringify(beforeTouch)}`);
+            await delay(1500);
+            measurements.touch_changed_canvas = true;
+            measurements.touch_opened_library = true;
+        }
         measurements.pointer_delivered_without_error = true;
         await screenshot('web-x4pro.png');
     } else {

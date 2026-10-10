@@ -201,7 +201,7 @@ selects the HMP monitor. Smoke tests copy both input images and save logs,
 measurements and PPM panel captures under `build-wasm/evidence/smoke`:
 
 ```sh
-x4prosim/wasm/smoke.sh flash.bin sd.img  # X3 Home, JIT activity, X4 Pro ROM/panel
+x4prosim/wasm/smoke.sh flash.bin sd.img  # X3 or X4 Pro Home, JIT and panel
 x4prosim/wasm/smoke.sh --rom-only       # no firmware; used in CI
 x4prosim/wasm/package-web.sh           # package existing default-mode binaries
 ```
@@ -209,7 +209,10 @@ x4prosim/wasm/package-web.sh           # package existing default-mode binaries
 Use `WASM64_MODE=64` with smoke/packaging for the native Memory64 build.
 `WASM_JIT_STATS=1` on the Node launcher logs successfully instantiated TB
 modules. `REFERENCE_PPM=/absolute/path/to/native.ppm` makes smoke compare the
-X3 capture byte for byte. Browser automation and controls are documented in
+firmware panel capture byte for byte. X4 Pro firmware is selected by chip ID 9
+in the bootloader/app header; it requires three `8179_DRF` refreshes and the
+following `[MEM]` checkpoint. X3 firmware also runs the existing X4 Pro
+blank-flash ROM check. Browser automation and controls are documented in
 [x4prosim/wasm/web/README.txt](x4prosim/wasm/web/README.txt).
 
 The launchers use ordinary TCG blocks with a 64 MiB translation cache and
@@ -303,6 +306,12 @@ controlled comparison. Detailed experiments and rejected candidates are in
 
 Keep these as separate reviewable changes, with their correctness and A/B evidence:
 
+- Reload the current CPU context on every shared Wasm TB entry for SMP guests
+  (`tcg/wasm64/tcg-target.c.inc`).
+- Round UC8179 animation deadlines upward and keep pending timers in the future
+  (`hw/display/uc8179.c`).
+- Use SDL renderer logical coordinates without scaling pointer input twice
+  (`ui/sdl2.c`).
 - Empty auxiliary timer-list wakeup guard (`util/qemu-timer.c`).
 - Direct dispatch for simple subpage MMIO (`system/physmem.c`, `accel/tcg/cputlb.c`).
 - Synchronous SD media checks for ordinary images (`block/block-backend.c`, `hw/sd/sd.c`).
@@ -313,16 +322,67 @@ Keep these as separate reviewable changes, with their correctness and A/B eviden
 
 BQL batching was not retained because native Home non-regression was not
 established. Turbo changes timing and should remain separate from the
-accurate-mode optimizations. Safari, Firefox and X4 Pro firmware were not
-executed in this verification.
+accurate-mode optimizations. Safari and Firefox remain untested; the later
+official X4 Pro release verification is recorded below.
 
 Wi-Fi is disabled in Wasm. Browser images consume their full logical size:
 a sparse 1 GiB SD still takes 1 GiB, with extra copies for loading and export.
 Start with the packaged 64 MiB card when possible. IndexedDB persistence is
-not implemented. X4 Pro acceptance covers blank-flash ROM boot, panel creation
-and pointer delivery without an error; no X4 Pro firmware image was available
-to verify its Home screen or touch response. These tests do not establish
-coverage for every firmware or all self-modifying-code/remapping cases.
+not implemented. X4 Pro acceptance now includes the official 1.6.5 firmware
+as well as blank-flash ROM boot. These tests do not establish coverage for
+every firmware or all self-modifying-code/remapping cases.
+
+## Official CrossPoint X4 Pro verification (2026-10-10)
+
+The unmodified **1.6.5 X4 Pro release** composed with `mkflash.py` boots to Home
+natively, including a blank 64 MiB SD first run. `drive.py` verified Down/Up
+selection, GT911 taps into Library and Settings, and the capacitive Home key.
+The same screens work with `testdata/sdcard` copied onto the card; that fixture
+contains battery history but no books. Power draws the sleep screen, but a
+second Power press does not resume; S3 deep sleep/ext0/ext1 wake remains open.
+
+The same composed image reaches Home and the following `[MEM]` checkpoint
+under Node in default turbo and `TURBO=0`, and in Chrome with either mode.
+The browser smoke verifies Down/Up, a pointer tap that opens Library, and Stop.
+The turbo Home PPM matches the native capture byte for byte. With the tested
+blank card, Home takes about 2.5 seconds in Node/browser turbo and 7.8–8.0 seconds
+in accurate mode on the M5 Max; these are individual acceptance runs.
+
+Three emulator fixes were needed: shared Wasm translation blocks now reload
+the current CPU context on entry; UC8179 rounds animation deadlines upward
+so turbo cannot rearm an already expired timer; SDL 2D pointer coordinates
+use the renderer's logical size rather than being scaled a second time.
+Existing Wasm binaries must be rebuilt to include these fixes.
+
+Touch scripting uses the existing monitor interface:
+
+```sh
+python3 x4prosim/drive.py x4pro.bin sd.img native.log wait:25 \
+  press:down wait:2 press:up wait:2 \
+  'hmp:qom-set /machine/gt911 tap 240,420' wait:4 shot:library.png \
+  'hmp:qom-set /machine/gt911 tap home' wait:3 \
+  'hmp:qom-set /machine/gt911 tap 240,560' wait:4 shot:settings.png
+```
+
+The coordinates select Library and Settings on the blank-card Home layout.
+`tap home` activates the capacitive Home key. A held contact can instead use
+`qom-set /machine/gt911 touch X,Y`, followed by `touch up`.
+
+The X4 Pro **has no IMU in the supported board profile** (`imuAddr=0`,
+`ImuType::None`), consistent with the supplied real-device boot log's
+`[GYR] No IMU on this board`. Release 1.6.5 logs `SDK IMU not found` for the
+same absent capability; it is not a missing emulator peripheral. Tilt page
+turns are unavailable on this board, and the IMU wrapper returns before
+sensor wake/sleep or polling. It does not provide the physical wake source.
+I2C0 models GT911 (0x5D), BM8563 (0x51) and CW2017 (0x63), matching the profile.
+
+The `Wire.cpp` lock/NULL TX warnings in the X3 log come from release 1.6.5's
+raw BQ27220 current reads in `HalGPIO::getWakeupReason()` before `Wire.begin()`.
+The calls fail on uninitialized Wire state before reaching the I2C controller;
+later SDK sensor initialization brings the bus up. They are firmware startup
+ordering diagnostics, not missing-device NACKs. These X4 Pro runs produce no
+Wire lock/NULL TX warnings. No firmware or peripheral model was changed to
+suppress diagnostics.
 
 ## Where it stands (2026-10-08, 1007e firmware)
 
