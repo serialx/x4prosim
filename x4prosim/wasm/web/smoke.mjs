@@ -213,6 +213,8 @@ smoke: try {
     })()`);
     if (!measurements.webgl) throw new Error('WebGL must be available for this acceptance test');
     if (process.env.WEB_MACHINE === 'x4pro') {
+        // The runtime appears after the emulator download; from a remote host that takes seconds.
+        await waitFor(`!!document.querySelector('iframe').contentWindow.Module?.FS`);
         measurements.firmware = await evaluate(`(() => {
             const bytes = document.querySelector('iframe').contentWindow.Module.FS.readFile('/flash.bin');
             return [0, 0x10000].some(offset => bytes[offset] === 0xe9 &&
