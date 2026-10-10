@@ -41,6 +41,13 @@ if ! command -v glibtoolize >/dev/null && ! command -v libtoolize >/dev/null; th
     echo 'Missing tool: glibtoolize (macOS) or libtoolize (Linux)' >&2
     exit 1
 fi
+# libffi's configure.ac uses LT_SYS_SYMBOL_USCORE from ltdl.m4, which Debian
+# and Ubuntu ship in libltdl-dev rather than libtool.
+if ! find "$(aclocal --print-ac-dir 2>/dev/null)" /usr/share/aclocal /usr/local/share/aclocal \
+        -maxdepth 1 -name ltdl.m4 -print -quit 2>/dev/null | grep -q .; then
+    echo 'Missing ltdl.m4: install libltdl-dev (Debian/Ubuntu) or libtool (Homebrew)' >&2
+    exit 1
+fi
 SYSROOT=$(cd "$SYSROOT" && pwd)
 # Meson cannot expand shell environment variables in a cross file.
 python3 - "$ROOT/x4prosim/wasm/cross.meson" "$CROSS" "$SYSROOT" <<'PYTHON'
