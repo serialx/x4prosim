@@ -31,6 +31,7 @@
 #include "qapi/qapi-events-run-state.h"
 #include "qapi/qmp/qerror.h"
 #include "exec/gdbstub.h"
+#include "exec/icount.h"
 #include "accel/accel-cpu-ops.h"
 #include "system/hw_accel.h"
 #include "exec/cpu-common.h"
@@ -526,6 +527,12 @@ bool qemu_in_vcpu_thread(void)
 
 QEMU_DEFINE_STATIC_CO_TLS(bool, bql_locked)
 
+#ifdef __EMSCRIPTEN__
+/* Physical ownership retained between logical BQL critical sections. */
+QEMU_DEFINE_STATIC_CO_TLS(bool, bql_deferred_unlock)
+static unsigned bql_waiters;
+#endif
+
 bool mutex_is_bql(QemuMutex *mutex)
 {
     return mutex == &bql;
@@ -577,13 +584,40 @@ void bql_lock_impl(const char *file, int line)
     QemuMutexLockFunc bql_lock_fn = qatomic_read(&bql_mutex_lock_func);
 
     g_assert(!bql_locked());
+#ifdef __EMSCRIPTEN__
+    if (get_bql_deferred_unlock()) {
+        set_bql_deferred_unlock(false);
+        bql_update_status(true);
+        return;
+    }
+    qatomic_inc(&bql_waiters);
+#endif
     bql_lock_fn(&bql, file, line);
+#ifdef __EMSCRIPTEN__
+    qatomic_dec(&bql_waiters);
+#endif
 }
 
 void bql_unlock(void)
 {
     g_assert(bql_locked());
     g_assert(!bql_unlock_blocked);
+#ifdef __EMSCRIPTEN__
+    /*
+     * Single-vCPU icount execution returns to the round-robin loop at the
+     * next timer deadline.  Keep physical ownership between device accesses
+     * until then, unless another thread is waiting for the BQL.  Logical
+     * ownership still follows every lock/unlock pair, including longjmp
+     * cleanup in cpu_exec().  Do not defer an unlock from a coroutine.
+     */
+    if (current_cpu && current_cpu->running && icount_enabled() &&
+        !CPU_NEXT(first_cpu) && !qemu_in_coroutine() &&
+        !qatomic_read(&bql_waiters)) {
+        set_bql_deferred_unlock(true);
+        bql_update_status(false);
+        return;
+    }
+#endif
     qemu_mutex_unlock(&bql);
 }
 

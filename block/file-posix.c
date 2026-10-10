@@ -2500,7 +2500,16 @@ out:
 
 static int coroutine_fn raw_thread_pool_submit(ThreadPoolFunc func, void *arg)
 {
+#ifdef __EMSCRIPTEN__
+    /*
+     * Emscripten filesystem calls are synchronous and run on the JavaScript
+     * main thread.  A thread-pool worker adds a handoff and an AIO completion
+     * notification without making the underlying operation asynchronous.
+     */
+    return func(arg);
+#else
     return thread_pool_submit_co(func, arg);
+#endif
 }
 
 /*
