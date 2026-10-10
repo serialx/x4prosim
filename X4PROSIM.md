@@ -194,6 +194,13 @@ The browser has a portrait SDL panel, CDC log, keys and X4 Pro pointer input.
 Reset resets the guest; Stop retains the SD in page memory for the next Start.
 Download SD image saves guest writes. Closing or reloading loses unsaved
 changes; flash changes are not exported. A blank 64 MiB FAT32 card is included.
+The SD card panel is a file explorer for the in-memory card: upload (picker or
+drag-and-drop, folders included), new folder, rename, delete, download a file,
+before Start, while running and after Stop. `fat.js` edits FAT32 in place; exFAT,
+FAT12 and FAT16 cards are reported as unsupported (the emulator still boots them).
+A change while the emulator runs pauses the guest, edits `/sd.img` in the runtime
+iframe and resets the device so the firmware mounts the modified card again.
+`node x4prosim/wasm/web/fat.test.mjs` checks `fat.js` against dosfstools and mtools.
 
 Node mounts host files under `/host`. `run-node.sh` copies flash into `.run`
 but writes the supplied SD directly, so use a copy when testing. Ctrl-a c

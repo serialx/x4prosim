@@ -71,6 +71,21 @@ copies the card, and resumes execution. Card writes are kept only in memory
 until downloaded; refresh/closing the tab loses them. Flash changes are not
 exported. Select another SD file to discard the in-memory card for the next run.
 
+The SD card panel is a file explorer for the in-memory card: browse folders,
+upload files (picker or drag-and-drop, folders included), create folders,
+rename, delete, and download single files. It works before the first Start
+(the blank card or the picked image loads as soon as the page opens), while the
+emulator runs, and after Stop. fat.js (plain JavaScript, no dependencies)
+edits the FAT32 image in place; exFAT, FAT12 and FAT16 cards are reported as
+unsupported and the explorer is disabled, but the emulator still boots them.
+While the emulator runs, each operation pauses the guest through the HMP
+monitor, applies the change to /sd.img inside the runtime iframe, and then
+resets the device, because the firmware caches FAT and directory sectors and
+has to mount the modified card again. Listing and single-file downloads only
+pause and resume. Uploaded names are normalised to NFC. fat.test.mjs
+exercises fat.js under Node against dosfstools and mtools (mkfs.vfat, fsck.fat,
+mcopy, mdir): node x4prosim/wasm/web/fat.test.mjs.
+
 Images occupy browser memory at their full logical size: a sparse 1 GiB file
 still needs 1 GiB in the browser, and exporting needs another copy. A 64 MiB
 card is a useful starting point. A first boot with books can spend substantial

@@ -17,7 +17,8 @@
     <label>SD image · optional <input id="sd" type="file" accept=".img"></label>
     <label><input id="turbo" type="checkbox"> Turbo (fast, not timing-accurate)</label>
     <button id="start">Start</button>
-    <p class="hint">Without an SD image, a blank 64 MiB FAT32 card is used. Download your SD image to keep changes.</p>
+    <p class="hint">Without an SD image, a blank 64 MiB FAT32 card is used. Use the SD card panel to add
+      books, then download the SD image to keep changes.</p>
   </section>
   <p id="status" role="status">Choose a flash image to begin.</p>
   <main>
@@ -31,8 +32,31 @@
         <button id="download" disabled>Download SD image</button>
       </div>
     </section>
-    <section class="console"><h2>USB-CDC console</h2><pre id="console" tabindex="0" aria-label="Firmware console"></pre></section>
+    <div class="side">
+      <section class="sd" aria-label="SD card">
+        <div class="sd-head"><h2>SD card</h2><span id="sd-info" role="status">Loading SD image…</span></div>
+        <nav id="sd-path" aria-label="Folder path"></nav>
+        <div class="sd-tools">
+          <button id="sd-upload" disabled>Upload files…</button>
+          <input id="sd-files" type="file" multiple hidden aria-label="Files to copy to the SD card">
+          <button id="sd-mkdir" disabled>New folder</button>
+          <button id="sd-refresh" disabled>Refresh</button>
+        </div>
+        <div class="sd-scroll">
+          <table id="sd-table">
+            <thead><tr><th>Name</th><th>Size</th><th class="date">Modified</th><th aria-label="Actions"></th></tr></thead>
+            <tbody id="sd-rows"></tbody>
+          </table>
+        </div>
+        <p id="sd-error" role="alert"></p>
+        <p class="hint">Drop files or folders here to copy them into the open folder. Changing the card while
+          the emulator runs resets the device so the firmware mounts the card again.</p>
+      </section>
+      <section class="console"><h2>USB-CDC console</h2><pre id="console" tabindex="0" aria-label="Firmware console"></pre></section>
+    </div>
   </main>
+  <script src="fat.js"></script>
+  <script src="sd-ops.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

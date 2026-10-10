@@ -1,8 +1,11 @@
 /* A fresh iframe owns each Emscripten instance and its pthread workers. */
 'use strict';
 let input = [];
-let snapshot = null;
 let monitor = false;
+// Actions that need the VM stopped (snapshots, SD card operations), FIFO.
+// Each one runs on the 'VM status: paused' line of its own 'info status'.
+const pauses = [];
+let paused = null;
 const canvas = document.querySelector('canvas');
 const send = (type, extra = {}) => parent.postMessage({type, ...extra}, location.origin);
 const keyCodes = {ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
@@ -27,16 +30,63 @@ function turboProperties(machine) {
 }
 function output(line) {
     // HMP shares the CDC chardev; keep terminal editing escapes out of the log.
-    if (!line.includes('\x1b') && !line.startsWith('QEMU ')) {
+    // 'VM status' answers the page's own pause requests; keep them out too.
+    if (!line.includes('\x1b') && !line.startsWith('QEMU ') && !line.startsWith('VM status:')) {
         send('log', {line: line.replace(/^\(qemu\) /, '')});
     }
-    if (snapshot && line.includes('VM status: paused')) {
-        const action = snapshot;
-        snapshot = null;
+    if (paused && line.includes('VM status: paused')) {
+        const action = paused;
+        const resume = action();
+        if (resume === 'reset') command('system_reset\ncont');
+        else if (resume === 'cont') command('cont');
+        nextPause();
+    }
+}
+function whilePaused(action) {
+    pauses.push(action);
+    if (!paused) nextPause();
+}
+function nextPause() {
+    paused = pauses.shift() || null;
+    if (paused) command('stop\ninfo status');
+}
+function snapshot(action) {
+    whilePaused(() => {
         const bytes = Module.FS.readFile('/sd.img');
         parent.postMessage({type: 'snapshot', action, bytes}, location.origin, [bytes.buffer]);
-        if (action === 'download') command('cont');
-    }
+        return action === 'download' ? 'cont' : null;
+    });
+}
+// The card image QEMU reads and writes, in place (writeFile(canOwn) adopted it).
+function sdBytes() {
+    const node = Module.FS.lookupPath('/sd.img').node;
+    return node.contents.subarray(0, node.usedBytes);
+}
+function sdOperation({id, op, args}) {
+    whilePaused(() => {
+        const reply = {type: 'sd-result', id, ok: true, reset: false};
+        const transfer = [];
+        try {
+            const image = sdBytes();
+            reply.result = sdExecute(image, op, args);
+            if (reply.result.bytes) {
+                // Transfer only a buffer that holds nothing but the file.
+                const {bytes} = reply.result;
+                if (bytes.buffer === image.buffer || bytes.byteOffset || bytes.byteLength !== bytes.buffer.byteLength) {
+                    reply.result.bytes = bytes.slice();
+                }
+                transfer.push(reply.result.bytes.buffer);
+            }
+            reply.reset = sdMutates(op);
+        } catch (error) {
+            reply.ok = false;
+            reply.error = {code: error.code || 'EIO', message: error.message};
+            // Anything that may have touched a sector needs a remount.
+            reply.reset = sdMutates(op) && !sdPrecheckErrors.includes(error.code);
+        }
+        parent.postMessage(reply, location.origin, transfer);
+        return reply.reset ? 'reset' : 'cont';
+    });
 }
 function command(text) {
     if (!monitor) { input.push(1, 99); monitor = true; }
@@ -53,8 +103,9 @@ window.addEventListener('message', async ({source, origin, data}) => {
     } else if (data.type === 'reset') {
         command('system_reset');
     } else if (data.type === 'download' || data.type === 'stop') {
-        snapshot = data.type;
-        command('stop\ninfo status');
+        snapshot(data.type);
+    } else if (data.type === 'sd') {
+        sdOperation(data);
     } else if (data.type === 'boot') {
         const {machine, flash, sd, rom, turbo = false} = data;
         // Keep the default pacing; allow deterministic benchmark runs to opt out.
