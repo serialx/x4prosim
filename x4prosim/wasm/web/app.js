@@ -16,13 +16,13 @@ function append(line) {
         $('console').textContent = $('console').textContent.slice(-800000);
     }
     $('console').scrollTop = $('console').scrollHeight;
-    if (/Wait complete:\s+(?:8279|X3)_DRF/.test(line) && ++milestones === 3) {
+    if (/Wait complete:\s+(?:8179|8279|X3)_DRF/.test(line) && ++milestones === 3) {
         const seconds = (performance.now() - startedAt) / 1000;
-        status(`X3 · Home drawn in ${seconds.toFixed(2)} s · finishing startup…`);
+        status(`${/8179_DRF/.test(line) ? 'X4 Pro' : 'X3'} · Home drawn in ${seconds.toFixed(2)} s · finishing startup…`);
         window.bootTimeSeconds = seconds;
     }
     if (line.includes('[MEM]') && window.bootTimeSeconds) {
-        status(`X3 · Ready · Home drawn in ${window.bootTimeSeconds.toFixed(2)} s`);
+        status(`${frame?.title.startsWith('X4 Pro') ? 'X4 Pro' : 'X3'} · Ready · Home drawn in ${window.bootTimeSeconds.toFixed(2)} s`);
     }
 }
 function key(code, down) {

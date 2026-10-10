@@ -34,11 +34,17 @@ else:
         shutil.copyfile(src, evidence / dest)
 (evidence / 'blank.bin').write_bytes(bytes(16 * 1024 * 1024))
 timeout = float(os.environ.get('TIMEOUT', '600'))
-# Native CrossPoint reaches Home by the third completed panel refresh.
+# CrossPoint X3 and X4 Pro draw Home by the third completed refresh.
 # The optional [HOME] thumbnail warning disappears once its cache exists.
-milestone = re.compile(os.environ.get('HOME_MILESTONE',
-    r'Wait complete:\s+(?:8279|X3)_DRF'))
-milestone_count = int(os.environ.get('HOME_MILESTONE_COUNT', '3'))
+firmware_machine = None
+if not rom_only:
+    image = (evidence / 'flash.bin').read_bytes()
+    chip = next((int.from_bytes(image[offset + 12:offset + 14], 'little')
+                 for offset in (0, 0x10000)
+                 if image[offset:offset + 1] == b'\xe9'), None)
+    if chip not in (5, 9):
+        sys.exit('Expected a composed ESP32-C3 or ESP32-S3 firmware image')
+    firmware_machine = 'x3' if chip == 5 else 'x4pro'
 measurements = {}
 reference = os.environ.get('REFERENCE_PPM')
 # Turbo compares image content and boot milestones, never guest timestamps.
@@ -48,10 +54,14 @@ if turbo and not rom_only and not os.environ.get('NATIVE_QEMU') and not referenc
     subprocess.run([str(root / 'x4prosim/wasm/smoke.sh'), '--turbo', *args],
         env={**os.environ, 'NATIVE_QEMU': str(root / 'build'),
              'EVIDENCE_DIR': str(native_evidence)}, check=True)
-    reference = str(native_evidence / 'x3.ppm')
+    reference = str(native_evidence / (firmware_machine + '.ppm'))
 
 
-def run(machine, flash):
+def run(machine, flash, firmware=False):
+    milestone = re.compile(os.environ.get('HOME_MILESTONE',
+        r'Wait complete:\s+(?:8279|X3)_DRF' if machine == 'x3' else
+        r'Wait complete:\s+8179_DRF'))
+    milestone_count = int(os.environ.get('HOME_MILESTONE_COUNT', '3'))
     log_path = evidence / (machine + '.log')
     shot = evidence / (machine + '.ppm')
     shot.unlink(missing_ok=True)
@@ -113,7 +123,7 @@ def run(machine, flash):
                     boot = time.monotonic() - start
                 if ready is None:
                     matched = (len(milestone.findall(text)) >= milestone_count
-                               if machine == 'x3' else
+                               if firmware else
                                text.count('invalid header: 0x00000000') >= 2)
                     if matched:
                         ready = time.monotonic() - start
@@ -123,7 +133,7 @@ def run(machine, flash):
                 # Allow the panel update / main loop to settle, then capture it.
                 matches = list(milestone.finditer(text))
                 settled = (ready is not None and re.search(r'\[MEM\][^\n]*\n', text[matches[milestone_count - 1].end():])
-                           if machine == 'x3' else
+                           if firmware else
                            ready is not None and now - start > ready + 2)
                 if ready is not None and not requested and settled:
                     settled_time = time.monotonic() - start
@@ -141,13 +151,13 @@ def run(machine, flash):
                     expected = (528, 792) if machine == 'x3' else (480, 800)
                     if (width, height) != expected:
                         raise RuntimeError(f'Unexpected panel size: {width}x{height}')
-                    if machine == 'x3' and len(set(header[3])) < 2:
-                        raise RuntimeError('X3 panel is blank')
+                    if firmware and len(set(header[3])) < 2:
+                        raise RuntimeError(f'{machine} panel is blank')
                     counts = re.findall(r'WASM_JIT compiled_tbs=(\d+)', text)
                     compiled = int(counts[-1]) if counts else 0
-                    if require_jit and machine == 'x3' and compiled == 0:
+                    if require_jit and firmware and compiled == 0:
                         raise RuntimeError('Home reached without any JIT-compiled TBs')
-                    if machine == 'x3' and reference and shot.read_bytes() != Path(reference).read_bytes():
+                    if firmware and reference and shot.read_bytes() != Path(reference).read_bytes():
                         raise RuntimeError(f'Panel differs from native reference {reference}')
                     screenshot_time = time.monotonic() - start
                     # Like drive.py, stop the emulator after capturing evidence.
@@ -165,7 +175,7 @@ def run(machine, flash):
                             p.kill()
                         time.sleep(.01)
                     peak_rss = usage.ru_maxrss / (1024 if sys.platform == 'darwin' else 1)
-                    measurements[machine] = dict(turbo=turbo, startup_to_rom_s=boot,
+                    measurements[machine] = dict(turbo=turbo, firmware=firmware, startup_to_rom_s=boot,
                         milestone_s=ready, settled_mem_s=settled_time, screenshot_s=screenshot_time,
                         jit_compiled_tbs=compiled, home_jit_compiled_tbs=home_compiled,
                         peak_rss_kib=peak_rss,
@@ -187,11 +197,13 @@ def run(machine, flash):
 
 try:
     if not rom_only:
-        run('x3', evidence / 'flash.bin')
-    run('x4pro', evidence / 'blank.bin')
+        run(firmware_machine, evidence / 'flash.bin', firmware=True)
+    if firmware_machine != 'x4pro':
+        run('x4pro', evidence / 'blank.bin')
 except Exception as exc:
     sys.exit(str(exc))
 (evidence / 'measurements.json').write_text(json.dumps(measurements, indent=2) + '\n')
 print('PASS: X4 Pro blank-flash ROM and panel screendump' if rom_only else
-      'PASS: X3 Home refresh and X4 Pro blank-flash ROM; both panel screendumps captured')
+      f'PASS: {firmware_machine} Home refresh and settled panel screendump' +
+      ('; X4 Pro blank-flash ROM also passed' if firmware_machine == 'x3' else ''))
 PY
