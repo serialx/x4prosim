@@ -1285,6 +1285,9 @@ static int (* const net_client_init_fun[NET_CLIENT_DRIVER__MAX])(
 #endif
         [NET_CLIENT_DRIVER_TAP]       = net_init_tap,
         [NET_CLIENT_DRIVER_SOCKET]    = net_init_socket,
+#ifdef __EMSCRIPTEN__
+        [NET_CLIENT_DRIVER_BROWSER] = net_init_browser,
+#endif
         [NET_CLIENT_DRIVER_STREAM]    = net_init_stream,
         [NET_CLIENT_DRIVER_DGRAM]     = net_init_dgram,
 #ifdef CONFIG_VDE

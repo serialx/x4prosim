@@ -4469,12 +4469,17 @@ foreach target : target_dirs
       exe_name += '-unsigned'
     endif
 
+    emulator_link_depends = [block_syms, qemu_syms]
+    if host_os == 'emscripten'
+      emulator_link_depends += files('x4prosim/wasm/net.js',
+                                     'x4prosim/wasm/node-fs.js')
+    endif
     emulator = executable(exe_name, exe['sources'],
                install: true,
                c_args: c_args,
                dependencies: arch_deps + exe['dependencies'],
                objects: lib.extract_all_objects(recursive: true),
-               link_depends: [block_syms, qemu_syms],
+               link_depends: emulator_link_depends,
                link_args: link_args,
                win_subsystem: exe['win_subsystem'])
 

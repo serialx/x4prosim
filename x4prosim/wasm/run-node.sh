@@ -34,6 +34,10 @@ esac
 cp "$flash" "$flash.run"
 chmod u+w "$flash.run"
 timing=(-icount "shift=$shift_bits,sleep=${RUN_NODE_SLEEP:-on}")
+network=(-nic none)
+if [ -n "${WIFI_ASSETS:-}" ]; then
+    network=(-nic browser,model=esp32_wifi)
+fi
 if [ "${TURBO:-0}" = 1 ]; then
     timing=(-icount "shift=$shift_bits,sleep=off")
     while IFS= read -r arg; do
@@ -49,4 +53,4 @@ exec "${NODE:-node}" "${WASM_BUILD_DIR:-$build}/qemu-system-$arch.js" \
     -drive "file=/host${sd//,/,,},if=sd,format=raw,cache.direct=off" \
     -chardev stdio,id=cdc,mux=on -serial null \
     -global driver=misc.esp32s3.usb_serial_jtag,property=chardev,value=cdc \
-    -mon chardev=cdc,mode=readline -display none -nic none "$@"
+    -mon chardev=cdc,mode=readline -display none "${network[@]}" "$@"

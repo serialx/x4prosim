@@ -86,3 +86,87 @@ tap into Library. This requires the shared-TB CPU context reload, UC8179 timer
 rounding and SDL logical-coordinate fixes in the current source. S3 deep-sleep
 wake remains unsupported. This X4 Pro verification used `MEMORY64=2`;
 `MEMORY64=1` and Safari/Firefox were not retested with these fixes.
+
+## Wi-Fi and font downloads
+
+The browser can download fonts through the firmware's normal **Manage Fonts**
+flow without a relay, native QEMU, or a running backend. Build and serve the
+static package:
+
+```sh
+x4prosim/wasm/build.sh --web
+python3 x4prosim/wasm/serve.py build-wasm-32limit/web-dist
+```
+
+Leave **Enable Wi-Fi downloads** checked, start an official CrossPoint 1.6.5
+image, and open **Settings > Reader > Manage Fonts**. Join the open
+**PICSimLabWifi** network. Installed fonts are saved with the SD card in this
+browser. Use **Download SD image** to export a copy.
+The package also works on static HTTPS hosting with the existing isolation
+service worker. `?wifi=off` disables networking.
+
+Packaging builds a separate wasm32 module using pinned lwIP 2.2.1 and mbedTLS
+3.6.7 sources, then downloads the font assets and license notices. Both QEMU
+address modes use the same network module. Initial preparation needs internet
+access; later packaging reuses the local assets and dependency archives.
+Emscripten, CMake, Ninja, OpenSSL, curl, and Python 3 are required to build it.
+
+The default catalog includes Alef, Literata, Noto Sans Extended, and Pretendard.
+Only these prepared families appear in the device's download list. To select a
+different bundle, prepare it and package again:
+
+```sh
+python3 x4prosim/wasm/prepare-wifi-assets.py build-wasm-deps/wifi-assets \
+  --family Alef --family Literata --family SourceSerif4
+x4prosim/wasm/package-web.sh
+```
+
+`--catalog` selects a different font format/release manifest. The default is
+`sd-fonts-m1-b4`. For families without a built-in license source, supply
+`--license-dir /path/to/notices`, containing `<Family>.txt` notices. Each font
+is checked against the catalog's size and CRC32; `index.json` records source
+URLs and SHA256 hashes. Files stay in ignored build directories. To use another
+prepared directory, set `WIFI_ASSETS=/absolute/path` when packaging.
+Packaging verifies the prepared files and publishes only the selected catalog
+and its licenses. Unselected fonts can remain in the download cache for reuse.
+
+This adapter implements **HTTP downloads**, not general internet networking.
+lwIP terminates Ethernet/TCP locally; DHCP and DNS assign the virtual network,
+and NTP uses the browser's clock. mbedTLS terminates guest HTTPS in the page.
+JavaScript maps prepared font URLs to static files and streams the response
+back to the guest. Sending advances on writes and TCP acknowledgements; the
+maintenance timer does not impose a per-block download delay.
+
+Other GET/HEAD requests use browser fetch and remain subject
+to CORS, mixed-content rules, and browser header restrictions. Uploads, incoming
+servers, arbitrary TCP/UDP protocols, and forwarding guest credentials are not
+supported. Missing or blocked downloads return an HTTP error, not an empty
+successful file.
+
+The local TLS endpoint uses an untrusted, self-signed certificate. CrossPoint
+1.6.5's wolfSSL downloader already disables certificate verification, allowing
+this to work without firmware patches. Firmware that verifies certificates or
+pins keys will reject it. Real HTTPS fetches still use the browser's certificate
+verification; no browser certificate or security setting needs changing.
+
+Node can use the same adapter after `build.sh --web`:
+
+```sh
+WIFI_ASSETS="$PWD/build-wasm-deps/wifi-assets" \
+  x4prosim/wasm/run-node.sh flash.bin sd.img
+```
+
+Node defaults to networking off without `WIFI_ASSETS`. The browser and Node
+release sessions and pending downloads when the runtime stops or aborts.
+
+Network checks (no relay or host sockets):
+
+```sh
+x4prosim/wasm/build-browser-net.sh
+python3 x4prosim/wasm/prepare-wifi-assets.py build-wasm-deps/wifi-assets
+node --test x4prosim/wasm/test-browser-network.mjs
+python3 -m unittest discover -s x4prosim/wasm -p test_wifi_assets.py
+```
+
+Set `BENCH_NETWORK=1` on the Node test command to also measure TCP/TLS throughput
+with a 10 ms simulated guest poll interval and verify every downloaded byte.

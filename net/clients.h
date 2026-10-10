@@ -26,6 +26,11 @@
 
 #include "net/net.h"
 
+#ifdef __EMSCRIPTEN__
+int net_init_browser(const Netdev *netdev, const char *name,
+                     NetClientState *peer, Error **errp);
+#endif
+
 int net_init_dump(const Netdev *netdev, const char *name,
                   NetClientState *peer, Error **errp);
 

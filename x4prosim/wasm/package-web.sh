@@ -9,7 +9,17 @@ case "${WASM64_MODE:-32}" in
 esac
 BUILD=${WASM_BUILD_DIR:-$DEFAULT_BUILD}
 DEST="$BUILD/web-dist"
+"$ROOT/x4prosim/wasm/build-browser-net.sh"
+ASSETS="${WIFI_ASSETS:-$ROOT/build-wasm-deps/wifi-assets}"
+if [ ! -f "$ASSETS/index.json" ]; then
+    python3 "$ROOT/x4prosim/wasm/prepare-wifi-assets.py" "$ASSETS"
+fi
 mkdir -p "$DEST"
+python3 "$ROOT/x4prosim/wasm/prepare-wifi-assets.py" "$ASSETS" --copy-to "$DEST/wifi-assets"
+cp "$ROOT/build-wasm-deps/browser-net/build/"{browser-net.mjs,browser-net.wasm,lwip.LICENSE.txt,mbedtls.LICENSE.txt} "$DEST/"
+# Node resolves the adapter next to its QEMU module.
+cp "$ROOT/build-wasm-deps/browser-net/build/"{browser-net.mjs,browser-net.wasm} "$BUILD/"
+cp "$ROOT/x4prosim/wasm/web/browser-network.mjs" "$BUILD/"
 cp "$ROOT"/x4prosim/wasm/web/* "$DEST/"
 for arch in riscv32 xtensa; do
     cp "$BUILD/qemu-system-$arch.js" "$BUILD/qemu-system-$arch.wasm" "$DEST/"

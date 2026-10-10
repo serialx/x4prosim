@@ -182,3 +182,24 @@ For header-less static hosting, run:
 Then repeat the smoke command using port 8001 and EXPECT_SERVICE_WORKER=1.
 The test requires a controlling service worker and cross-origin isolation before boot. Page-load-to-Home timing includes
 the initial reload; home_milestone_s is measured from image loading after reload.
+
+Wi-Fi / font downloads
+---------------------
+Leave Enable Wi-Fi downloads checked and join PICSimLabWifi inside the
+firmware's Settings > Reader > Manage Fonts flow. Downloads run entirely in
+the browser using the prepared wifi-assets directory. No relay is needed.
+Installed fonts are saved with the SD card in this browser. Use Download SD
+image to export a copy. ?wifi=off disables Wi-Fi.
+
+The default catalog contains Alef, Literata, Noto Sans Extended, and Pretendard.
+To change it, run prepare-wifi-assets.py with repeated --family arguments, then
+package-web.sh. Font license notices are in wifi-assets/licenses. lwIP and
+mbedTLS notices are included alongside the emulator.
+
+This is an HTTP download adapter, not general internet access. Guest HTTPS
+terminates locally with an untrusted certificate; CrossPoint 1.6.5's wolfSSL
+downloader accepts it without firmware changes. Firmware requiring a trusted
+certificate will reject it. Other GET/HEAD downloads depend on the source's
+CORS policy. Uploads, incoming servers, and arbitrary TCP/UDP are unsupported.
+
+See x4prosim/wasm/README.md in the source tree for preparation and Node usage.

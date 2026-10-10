@@ -41,8 +41,10 @@ function output(line) {
     if (paused && line.includes('VM status: paused')) {
         const action = paused;
         const resume = action();
-        if (resume === 'reset') command('system_reset\ncont');
-        else if (resume === 'cont') command('cont');
+        if (resume === 'reset') {
+            window.Module?.browserNetwork?.reset();
+            command('system_reset\ncont');
+        } else if (resume === 'cont') command('cont');
         nextPause();
     }
 }
@@ -56,6 +58,7 @@ function nextPause() {
 }
 function snapshot(action) {
     whilePaused(() => {
+        if (action === 'stop') Module.browserNetwork?.close();
         const bytes = Module.FS.readFile('/sd.img');
         parent.postMessage({type: 'snapshot', action, bytes}, location.origin, [bytes.buffer]);
         return action === 'stop' ? null : 'cont';
@@ -110,16 +113,27 @@ window.addEventListener('message', async ({source, origin, data}) => {
             keyCode: keyCodes[data.code], which: keyCodes[data.code], bubbles: true
         }));
     } else if (data.type === 'reset') {
+        window.Module?.browserNetwork?.reset();
         command('system_reset');
     } else if (data.type === 'download' || data.type === 'stop' || data.type === 'autosave') {
         snapshot(data.type);
     } else if (data.type === 'sd') {
         sdOperation(data);
     } else if (data.type === 'boot') {
-        const {machine, flash, sd, rom, turbo = false} = data;
+        const {machine, flash, sd, rom, wifi = true, turbo = false} = data;
         // Keep the default pacing; allow deterministic benchmark runs to opt out.
         const sleep = turbo || new URLSearchParams(parent.location.search).get('sleep') === 'off' ? 'off' : 'on';
+        let browserNetwork = null;
+        try {
+            if (wifi) browserNetwork = await (await import('./browser-network.mjs')).createBrowserNetwork({log: output});
+        } catch (error) {
+            // Return the card so a failed Wi-Fi startup can be retried without
+            // losing a card preserved by Stop in the previous session.
+            parent.postMessage({type: 'boot-error', message: String(error), sd}, location.origin, [sd]);
+            return;
+        }
         window.Module = {
+            browserNetwork,
             canvas,
             arguments: ['-L', '/', '-machine', machine,
                 '-accel', 'tcg,tb-size=64',
@@ -129,7 +143,8 @@ window.addEventListener('message', async ({source, origin, data}) => {
                 '-drive', 'file=/sd.img,if=sd,format=raw,cache.direct=off',
                 '-chardev', 'stdio,id=cdc,mux=on', '-serial', 'null', '-parallel', 'none',
                 '-global', 'driver=misc.esp32s3.usb_serial_jtag,property=chardev,value=cdc',
-                '-mon', 'chardev=cdc,mode=readline', '-display', 'sdl,show-cursor=on', '-nic', 'none'],
+                '-mon', 'chardev=cdc,mode=readline', '-display', 'sdl,show-cursor=on',
+                '-nic', wifi ? 'browser,model=esp32_wifi' : 'none'],
             print: output, printErr: output,
             onAbort: reason => send('error', {message: String(reason)}),
             onExit: status => send('exit', {status}),
@@ -153,4 +168,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
     }
 });
 window.addEventListener('error', event => send('error', {message: event.message}));
+window.addEventListener('pagehide', () => window.Module?.browserNetwork?.close());
 send('ready');
+
+window.addEventListener('unhandledrejection', event => send('error', {message: String(event.reason)}));

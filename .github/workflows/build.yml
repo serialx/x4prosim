@@ -290,7 +290,7 @@ jobs:
           # libltdl-dev supplies ltdl.m4 (LT_SYS_SYMBOL_USCORE) for libffi's autoreconf
           sudo apt-get install -y build-essential autoconf automake libtool libltdl-dev \
             pkg-config ninja-build meson python3-venv texinfo gettext \
-            dosfstools mtools
+            dosfstools mtools cmake openssl curl
       - name: Install Emscripten
         uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
         with:
@@ -301,6 +301,8 @@ jobs:
           node-version: '26'
       - name: Test browser FAT filesystem
         run: node x4prosim/wasm/web/fat.test.mjs
+      - name: Test Wi-Fi asset preparation and packaging
+        run: python3 -m unittest discover -s x4prosim/wasm -p test_wifi_assets.py
       - name: Cache wasm dependencies
         uses: actions/cache@v5
         with:
@@ -314,6 +316,8 @@ jobs:
         env:
           VERSION: ${{ needs.Vars.outputs.VERSION }}
         run: x4prosim/wasm/build.sh --web --with-pkgversion="$VERSION"
+      - name: Test browser Wi-Fi TCP and TLS downloads
+        run: node --test x4prosim/wasm/test-browser-network.mjs
       - name: Smoke test without firmware
         run: x4prosim/wasm/smoke.sh --rom-only
       - name: Check Pages isolation assets

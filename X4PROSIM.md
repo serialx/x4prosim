@@ -346,10 +346,14 @@ confirmed in the paired runs above. Turbo changes timing and remains separate fr
 accurate-mode optimizations. Safari and Firefox remain untested; the later
 official X4 Pro release verification is recorded below.
 
-Wi-Fi is disabled in Wasm. Browser images consume their full logical size:
+Wasm Wi-Fi downloads use an in-browser HTTP/TLS adapter and static font assets,
+with no relay or native QEMU dependency; see
+[Wi-Fi and font downloads](x4prosim/wasm/README.md#wi-fi-and-font-downloads).
+Browser images consume their full logical size:
 a sparse 1 GiB SD still takes 1 GiB, with extra copies for loading and export.
-Start with the packaged 64 MiB card when possible. IndexedDB persistence is
-not implemented. X4 Pro acceptance now includes the official 1.6.5 firmware
+Start with the packaged 64 MiB card when possible. The browser saves the SD
+card in IndexedDB and restores it on the next visit. X4 Pro acceptance now
+includes the official 1.6.5 firmware
 as well as blank-flash ROM boot. These tests do not establish coverage for
 every firmware or all self-modifying-code/remapping cases.
 

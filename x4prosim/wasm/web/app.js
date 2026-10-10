@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 // Accurate timing is the default; only ?turbo=1 opts into turbo.
 $('turbo').checked = params.get('turbo') === '1';
+$('wifi').checked = params.get('wifi') !== 'off';
 let frame, bootData, pending = false, running = false;
 // The page owns the SD image while the emulator is not running; the runtime
 // iframe owns it (MEMFS /sd.img) from boot until the stop snapshot returns it.
@@ -223,7 +224,7 @@ async function start() {
     pending = true;
     startedAt = performance.now(); milestones = 0; window.bootTimeSeconds = null;
     $('start').disabled = true; $('console').textContent = '';
-    for (const id of ['flash', 'sd', 'turbo', 'reset', 'stop', 'download']) $(id).disabled = true;
+    for (const id of ['flash', 'sd', 'turbo', 'wifi', 'reset', 'stop', 'download']) $(id).disabled = true;
     try {
         if (!crossOriginIsolated) throw new Error('SharedArrayBuffer needs isolation headers. Serve this folder with serve.py on localhost or HTTPS.');
         status('Loading images…');
@@ -241,7 +242,7 @@ async function start() {
         const rom = await fetchImage(machine === 'x3' ? 'esp32c3-rom.bin' : 'esp32s3_rev0_rom.bin');
         // The explorer waits for the runtime to own the card.
         sd.ready = false; sdSetEnabled(false); sdStatus('Starting the emulator…');
-        bootData = {type: 'boot', machine, flash, sd: sdImage.buffer, rom, turbo: $('turbo').checked};
+        bootData = {type: 'boot', machine, flash, sd: sdImage.buffer, rom, wifi: $('wifi').checked, turbo: $('turbo').checked};
         sdImage = null;
         buttons(machine);
         $('screen').style.aspectRatio = machine === 'x3' ? '528 / 792' : '480 / 800';
@@ -259,7 +260,7 @@ async function start() {
 function fail(message) {
     status(message); append(`Error: ${message}`);
     if (!frame) {
-        for (const id of ['start', 'flash', 'sd', 'turbo']) $(id).disabled = false;
+        for (const id of ['start', 'flash', 'sd', 'turbo', 'wifi']) $(id).disabled = false;
         if (bootData) {
             // The boot never reached the runtime; take the card back.
             sdImage = new Uint8Array(bootData.sd); bootData = null;
@@ -273,6 +274,14 @@ window.addEventListener('message', ({source, origin, data}) => {
     if (data.type === 'ready') {
         const data = bootData; bootData = null;
         post(data, [data.flash, data.sd, data.rom]);
+    }
+    if (data.type === 'boot-error') {
+        sdImage = new Uint8Array(data.sd);
+        release(); frame.remove(); frame = null;
+        $('keys').replaceChildren();
+        $('screen').textContent = 'Could not start Wi-Fi. Retry or disable Wi-Fi downloads.';
+        adoptSD();
+        fail(data.message);
     }
     if (data.type === 'log') append(data.line);
     if (data.type === 'error') fail(data.message);
@@ -300,7 +309,7 @@ window.addEventListener('message', ({source, origin, data}) => {
             $('screen').textContent = 'Stopped. Start again to use the current SD card.';
             $('keys').replaceChildren();
             for (const id of ['reset', 'stop']) $(id).disabled = true;
-            for (const id of ['start', 'flash', 'sd', 'turbo']) $(id).disabled = false;
+            for (const id of ['start', 'flash', 'sd', 'turbo', 'wifi']) $(id).disabled = false;
             status('Stopped. Start resumes from a fresh boot with your current SD image.');
             sdImage = data.bytes;
             sdSnapshotPending = false;

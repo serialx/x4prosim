@@ -1,6 +1,7 @@
 /* Node 22+: browser acceptance test over Chrome's built-in DevTools protocol.
  * Start serve.py and headless Chrome --remote-debugging-port=9224 first.
  * node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
+ * SAVE_SETTINGS=1 explicitly saves CrossPoint 1.6.5 settings on an empty card.
  * Required for X3: INPUT_SD (local source card, to compare the download).
  * Optional: CDP_PORT, CHROME_PID, EVIDENCE_DIR, TIMEOUT (seconds),
  * WEB_MACHINE=x4pro, EXPECT_SERVICE_WORKER=1, PICKER_FLASH/PICKER_SD, RELEASE_APP (local app for a ?flash= URL).
@@ -379,6 +380,15 @@ smoke: try {
         await delay(1500);
         await screenshot('web-keyboard-up.png');
         measurements.keyboard_up_changed_canvas = true;
+        if (process.env.SAVE_SETTINGS === '1') {
+            // CrossPoint 1.6.5 can boot a blank card without writing it.
+            // Enter and leave Settings to explicitly persist its defaults.
+            for (const name of ['Down', 'Down', 'Down', 'Confirm', 'Back']) {
+                await evaluate(`Array.from(document.querySelectorAll('#keys button')).find(button => button.textContent === ${JSON.stringify(name)}).click()`);
+                await delay(1500);
+            }
+            measurements.saved_settings = true;
+        }
         await evaluate('document.querySelector("#download").click()');
         await waitFor('!document.querySelector("#download").disabled');
         while (!fs.existsSync(path.join(downloads, 'sd.img'))) {
