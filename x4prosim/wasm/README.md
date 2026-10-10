@@ -33,11 +33,12 @@ compatible dependencies. `WASM_JIT_STATS=1` enables Node JIT module counts;
 `RUN_NODE_SLEEP=off` gives deterministic idle timing for comparisons. See the
 full guide before changing the fixed 256 MiB heap or 64 MiB translation cache.
 
-Turbo is opt-in: `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`, or the
-browser checkbox / `?turbo=1`. It keeps `-icount` with `sleep=off`, minimizes device
-delays and uses synchronous GPSPI transfers. It changes guest timing;
-`smoke.sh --turbo flash.bin sd.img` compares against native turbo without
-requiring timestamp equality. Default accurate mode is unchanged.
+Turbo is the default for `run-node.sh` and the browser page (checkbox ticked).
+Select accurate timing with `TURBO=0 x4prosim/wasm/run-node.sh flash.bin sd.img`
+or `?turbo=0`. Turbo keeps `-icount` with `sleep=off`, minimizes device delays
+and uses synchronous GPSPI transfers. It changes guest timing; `smoke.sh` tests
+accurate mode and `smoke.sh --turbo flash.bin sd.img` compares against native
+turbo without requiring timestamp equality.
 
 Final M5 Max three-run medians (`MEMORY64=2`, seconds):
 
@@ -50,5 +51,6 @@ Final M5 Max three-run medians (`MEMORY64=2`, seconds):
 
 Accurate mode beats guest time to Home (3.250 s), but misses settled startup
 (about 10.05 s); turbo beats both by changing delays. Both address modes build
-and pass smoke. GitHub Actions, hosted Pages, Safari/Firefox and X4 Pro firmware
-were not executed locally; X4 Pro coverage is ROM/panel only.
+and pass smoke. The hosted page is <https://serialx.github.io/x4prosim/>.
+Safari/Firefox and X4 Pro firmware were not executed; X4 Pro coverage is
+ROM/panel only.

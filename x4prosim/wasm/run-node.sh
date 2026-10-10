@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Headless Node launcher. Ctrl-a c switches between USB-CDC and the HMP monitor.
+# Turbo (fast, not timing-accurate) is the default; TURBO=0 selects accurate timing.
 # HMP screendump paths use /host followed by the absolute host path.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -26,14 +27,14 @@ case "$machine" in
     x4pro) arch=xtensa; shift_bits=2; accel=tcg,tb-size=64 ;;
     *) echo "unsupported machine: $machine" >&2; exit 2 ;;
 esac
-case "${TURBO:-0}" in
+case "${TURBO:-1}" in
     0|1) ;;
     *) echo 'TURBO must be 0 or 1' >&2; exit 2 ;;
 esac
 cp "$flash" "$flash.run"
 chmod u+w "$flash.run"
 timing=(-icount "shift=$shift_bits,sleep=${RUN_NODE_SLEEP:-on}")
-if [ "${TURBO:-0}" = 1 ]; then
+if [ "${TURBO:-1}" = 1 ]; then
     timing=(-icount "shift=$shift_bits,sleep=off")
     while IFS= read -r arg; do
         timing+=("$arg")

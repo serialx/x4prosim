@@ -156,7 +156,7 @@ smoke: try {
     }
     await waitFor('crossOriginIsolated && document.querySelector("iframe")');
     measurements.turbo = await evaluate('document.querySelector("#turbo").checked');
-    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') === '1') ||
+    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') !== '0') ||
         !await evaluate('document.querySelector("#turbo").disabled')) {
         throw new Error('Turbo selection must follow the URL and stay fixed during a run');
     }

@@ -1,7 +1,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-$('turbo').checked = params.get('turbo') === '1';
+// Turbo is the default; ?turbo=0 selects the timing-accurate mode.
+$('turbo').checked = params.get('turbo') !== '0';
 let frame, bootData, savedSD, pending = false;
 let milestones = 0, startedAt;
 const held = new Set();

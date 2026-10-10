@@ -16,6 +16,9 @@ Memory64 is also available in this Chrome version without experimental flags;
 older browsers may require MEMORY64=2. Firefox and Safari are not verified.
 
 Open http://127.0.0.1:8000 and select a 16 MiB flash image and optional SD image.
+The hosted copy is https://serialx.github.io/x4prosim/ (no firmware included).
+Turbo (fast, not timing-accurate) is ticked by default; untick it or open with
+?turbo=0 for accurate device timing, which is what smoke.sh measures.
 Alternatively put copies of your images in web-dist and open:
   http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img
 Query images must be same-origin or provide appropriate CORS/CORP headers.

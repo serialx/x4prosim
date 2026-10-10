@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  WASM_PAGES_BRANCH: x4prosim
+  WASM_PAGES_BRANCH: serialx/wasm-jit
 
 jobs:
 

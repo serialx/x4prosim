@@ -192,19 +192,22 @@ Wasm longjmp and fixed 256 MiB linear memory reduce runtime overhead.
 For larger workloads, rebuild with `WASM_INITIAL_MEMORY=<bytes>` or
 `WASM_MEMORY_GROWTH=1`; growth can cost performance. `WASM_ACCEL` overrides
 the Node accelerator setting; `RUN_NODE_SLEEP=off` disables idle-time warping
-for deterministic timing comparisons. The production default stays `on`.
+for deterministic timing comparisons in accurate mode (`sleep=on` otherwise).
 
-For faster execution, use `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`,
-`X4TURBO=1 x4prosim/run.sh flash.bin sd.img`, or the browser's **Turbo (not
-timing-accurate)** checkbox (`?turbo=1`). Turbo is off by default. It retains
-`-icount` with `sleep=off`, minimizes SD and panel delays, and opts into GPSPI
-`zero-wire-time` synchronous transfers; X3 BUSY pulses retain a 1 ms minimum.
-Removing `icount` made transfer timers depend on host scheduling, slowing native
-boot and stalling Node. Turbo reaches settled startup in 4.789 s in Node and
-5.558 s in Chrome, faster than the device end to end, but **changes guest timing
-and must not be used for timing measurements**. `smoke.sh --turbo flash.bin
-sd.img` compares the panel against a fresh native turbo reference without
-requiring timestamp equality.
+**Turbo is the default** for the browser page and the Node launcher: the
+**Turbo (fast, not timing-accurate)** checkbox starts ticked and `run-node.sh`
+behaves as `TURBO=1`. Select accurate timing with `?turbo=0` in the browser or
+`TURBO=0 x4prosim/wasm/run-node.sh flash.bin sd.img`. The native launcher keeps
+accurate timing by default; `X4TURBO=1 x4prosim/run.sh flash.bin sd.img` opts
+in. Turbo retains `-icount` with `sleep=off`, minimizes SD and panel delays,
+and opts into GPSPI `zero-wire-time` synchronous transfers; X3 BUSY pulses
+retain a 1 ms minimum. Removing `icount` made transfer timers depend on host
+scheduling, slowing native boot and stalling Node. Turbo reaches settled
+startup in 4.789 s in Node and 5.558 s in Chrome, faster than the device end
+to end, but **changes guest timing and must not be used for timing
+measurements**. `smoke.sh` runs accurate mode (it passes `TURBO=0`);
+`smoke.sh --turbo flash.bin sd.img` compares the panel against a fresh native
+turbo reference without requiring timestamp equality.
 
 ### CI and hosting
 
@@ -215,12 +218,13 @@ sysroot/compiler cache key includes the SDK version and dependency recipes.
 The artifact contains both emulators, ROMs, browser assets and the blank card;
 it contains no firmware or user SD images.
 
-Pages uploads and deploys only on **pushes to `x4prosim` in
-`serialx/x4prosim`**. `WASM_PAGES_BRANCH` in the workflow is the single branch
-setting; feature branches, PRs and forks do not deploy. Enable **Settings >
-Pages > Source: GitHub Actions** and allow that branch in the `github-pages`
-environment. GitHub Actions and Internet-hosted Pages deployment were not
-executed during local validation.
+Pages uploads and deploys only on **pushes to `serialx/wasm-jit` in
+`serialx/x4prosim`**, to <https://serialx.github.io/x4prosim/>.
+`WASM_PAGES_BRANCH` in the workflow is the single branch setting (change it to
+`x4prosim` once the branch is merged); other branches, PRs and forks do not
+deploy. The repository has **Settings > Pages > Source: GitHub Actions** enabled
+and the branch allowed in the `github-pages` environment. The hosted page ships
+no firmware: choose a flash image with the file picker.
 
 `serve.py` sets COOP/COEP headers for SharedArrayBuffer and pthreads. On Pages,
 the bundled MIT-licensed `coi-serviceworker` supplies isolation and reloads
@@ -244,12 +248,12 @@ Each column is an independent median, so phase medians need not sum to total.
 | Native, accurate `sleep=on` | 4.124 s | 11.695 s | 15.819 s |
 | Node, old TCI port, `sleep=on` (historical) | 16.209 s | — | 108.470 s |
 | Node JIT, accurate `sleep=off` | 2.394 s | 10.064 s | 12.464 s |
-| Node JIT, accurate `sleep=on` (default) | 4.635 s | 13.073 s | 17.708 s |
+| Node JIT, accurate `sleep=on` (`TURBO=0`) | 4.635 s | 13.073 s | 17.708 s |
 | Chrome, old TCI port (historical) | 19.79 s | — | 145.46 s |
 | Chrome JIT, accurate `sleep=off` | 3.069 s | 11.656 s | 14.758 s |
-| Chrome JIT, accurate `sleep=on` (default) | 5.264 s | 14.091 s | 19.355 s |
-| Node JIT, turbo | 1.097 s | 3.706 s | 4.789 s |
-| Chrome JIT, turbo | 1.636 s | 3.917 s | 5.558 s |
+| Chrome JIT, accurate `sleep=on` (`?turbo=0`) | 5.264 s | 14.091 s | 19.355 s |
+| Node JIT, turbo (default) | 1.097 s | 3.706 s | 4.789 s |
+| Chrome JIT, turbo (default) | 1.636 s | 3.917 s | 5.558 s |
 
 Accurate `sleep=off` reaches Home faster than the device in both Node and
 Chrome (guest 3.250 s), but settled startup still takes 1.24x/1.47x guest
@@ -280,9 +284,9 @@ Keep these as separate reviewable changes, with their correctness and A/B eviden
   (`ui/sdl2.c`), for the Emscripten port.
 
 BQL batching was not retained because native Home non-regression was not
-established. Optional turbo changes timing and should remain separate from the
-accurate-mode optimizations. GitHub Actions, Internet-hosted Pages, Safari,
-Firefox and X4 Pro firmware were not executed in this local verification.
+established. Turbo changes timing and should remain separate from the
+accurate-mode optimizations. Safari, Firefox and X4 Pro firmware were not
+executed in this verification.
 
 Wi-Fi is disabled in Wasm. Browser images consume their full logical size:
 a sparse 1 GiB SD still takes 1 GiB, with extra copies for loading and export.
