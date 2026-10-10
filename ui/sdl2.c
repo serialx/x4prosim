@@ -519,6 +519,10 @@ static void handle_mousemotion(SDL_Event *ev)
     }
 
     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
+    if (!scon->opengl) {
+        /* The 2D renderer already converts events to its logical size. */
+        SDL_RenderGetLogicalSize(scon->real_renderer, &scr_w, &scr_h);
+    }
     if (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled) {
         max_x = scr_w - 1;
         max_y = scr_h - 1;
@@ -557,6 +561,10 @@ static void handle_mousebutton(SDL_Event *ev)
 
     bev = &ev->button;
     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
+    if (!scon->opengl) {
+        /* Match the logical coordinates in SDL_MouseButtonEvent. */
+        SDL_RenderGetLogicalSize(scon->real_renderer, &scr_w, &scr_h);
+    }
     x = (int64_t)bev->x * surface_width(scon->surface) / scr_w;
     y = (int64_t)bev->y * surface_height(scon->surface) / scr_h;
 
