@@ -1,8 +1,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-// Turbo is the default; ?turbo=0 selects the timing-accurate mode.
-$('turbo').checked = params.get('turbo') !== '0';
+// Accurate timing is the default; only ?turbo=1 opts into turbo.
+$('turbo').checked = params.get('turbo') === '1';
 let frame, bootData, savedSD, pending = false;
 let milestones = 0, startedAt;
 const held = new Set();
@@ -10,6 +10,7 @@ const bindings = {Back: 'Backspace', Confirm: 'Enter', Left: 'ArrowLeft',
     Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Power: 'KeyP'};
 const post = (data, transfer = []) => frame?.contentWindow.postMessage(data, location.origin, transfer);
 const status = text => { $('status').textContent = text; };
+const timingLabel = () => $('turbo').checked ? 'Turbo (not timing-accurate)' : 'Accurate timing';
 function resizeScreen() {
     if (!frame) return;
     const dpr = window.devicePixelRatio || 1;
@@ -42,11 +43,11 @@ function append(line) {
     $('console').scrollTop = $('console').scrollHeight;
     if (/Wait complete:\s+(?:8179|8279|X3)_DRF/.test(line) && ++milestones === 3) {
         const seconds = (performance.now() - startedAt) / 1000;
-        status(`${/8179_DRF/.test(line) ? 'X4 Pro' : 'X3'} · Home drawn in ${seconds.toFixed(2)} s · finishing startup…`);
+        status(`${/8179_DRF/.test(line) ? 'X4 Pro' : 'X3'} · ${timingLabel()} · Home drawn in ${seconds.toFixed(2)} s · finishing startup…`);
         window.bootTimeSeconds = seconds;
     }
     if (line.includes('[MEM]') && window.bootTimeSeconds) {
-        status(`${frame?.title.startsWith('X4 Pro') ? 'X4 Pro' : 'X3'} · Ready · Home drawn in ${window.bootTimeSeconds.toFixed(2)} s`);
+        status(`${frame?.title.startsWith('X4 Pro') ? 'X4 Pro' : 'X3'} · ${timingLabel()} · Ready · Home drawn in ${window.bootTimeSeconds.toFixed(2)} s`);
     }
 }
 function key(code, down) {
@@ -158,7 +159,7 @@ async function start() {
         frame.src = 'runtime.html';
         $('screen').replaceChildren(frame);
         resizeScreen();
-        status(`${composition}Booting ${machine === 'x3' ? 'X3 (ESP32-C3)' : 'X4 Pro (ESP32-S3)'}…`);
+        status(`${composition}Booting ${machine === 'x3' ? 'X3 (ESP32-C3)' : 'X4 Pro (ESP32-S3)'} · ${timingLabel()}…`);
     } catch (error) { fail(error.message); }
     finally { pending = false; }
 }

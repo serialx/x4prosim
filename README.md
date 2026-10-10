@@ -47,19 +47,37 @@ Chrome 155 and Node 26 are verified; Firefox/Safari emulator runs are untested.
 Threads require cross-origin isolation, provided by the local server or the
 bundled service worker on HTTPS hosting.
 
-On an M5 Max, accurate X3 `sleep=off` reaches Home in 2.394 s in Node and
-3.069 s in Chrome, below the device's 3.250 s; settled startup still takes
-12.464/14.758 s versus about 10.05 s of guest time. Default `sleep=on`
-Home/settled medians are 4.635/17.708 s in Node and 5.264/19.355 s in Chrome.
-Historical old-TCI results were 16.209/108.470 s and 19.79/145.46 s respectively.
+Accurate timing is the default in the browser and Node launcher. The
+**Turbo (fast, not timing-accurate)** checkbox starts unticked; `?turbo=1` or
+`TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img` opts in. `?turbo=0` and
+`TURBO=0` remain accepted.
 
-Optional `TURBO=1` for Node or the browser's **Turbo (not timing-accurate)**
-checkbox (`?turbo=1`) reduces device delays: Home/settled medians are
-1.097/4.789 s in Node and 1.636/5.558 s in Chrome. Turbo is faster than the
-device end to end, but changes guest timing; accurate mode remains the default.
-Wi-Fi is disabled, SD writes must be downloaded before closing the browser,
-and X4 Pro has only ROM/panel acceptance. GitHub Actions, hosted Pages,
-Safari/Firefox and X4 Pro firmware were not run in local verification.
+The 2026-10-10 stack combines inline Emscripten file I/O with amortized BQL
+locking, lock-free GPSPI CMD reads with single-access dispatch, and direct
+TB tail chaining in the wasm64 backend. These changes preserve accurate guest
+waits and panel bytes; turbo separately reduces device delays and changes guest
+timing.
+
+CrossPoint 1.6.5 X3 on an Apple M5 Max, Emscripten 6.0.12, Node 26 and
+Chrome 155, using `MEMORY64=2`. Baseline is the build before these three
+changes. Node and native figures are independent three-run medians; Chrome
+figures are single-run confirmations with GPU/WebGL.
+Home is the third completed refresh; post-Home ends at the following `[MEM]`
+checkpoint. Chrome Home starts at image loading, while settled starts at page
+load, so those columns do not sum to the post-Home interval. Accurate figures
+use `sleep=off` for deterministic comparisons; normal launches use `sleep=on`.
+
+| Runtime / mode | Baseline Home / post-Home / settled | Combined stack Home / post-Home / settled | Post-Home reduction |
+| --- | ---: | ---: | ---: |
+| Node accurate, `sleep=off` | 2.404 / 9.897 / 12.299 s | 1.953 / 7.314 / 9.255 s | 26.10% |
+| Chrome accurate, `sleep=off` | 2.829 / 11.484 / 14.835 s | 2.358 / 8.580 / 11.463 s | 25.29% |
+| Chrome turbo | 1.368 / 3.993 / 5.886 s | 1.227 / 2.929 / 4.681 s | 26.65% |
+| Native accurate, `sleep=off` | 1.776 / 8.794 / 10.573 s | 1.541 / 8.024 / 9.565 s | 8.76% |
+
+With `sleep=off`, the combined stack reaches accurate settled startup in Node
+within the roughly 10.05 s of guest time; Chrome still takes longer. Wi-Fi is disabled, and SD
+writes must be downloaded before closing the browser. Official X4 Pro firmware
+also passed native, Node and Chrome acceptance; Safari/Firefox remain untested.
 See [the full WebAssembly guide](X4PROSIM.md#webassembly-build) for build modes,
 measurement methods, limits and upstream candidates.
 

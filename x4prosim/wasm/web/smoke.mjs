@@ -221,11 +221,12 @@ smoke: try {
         }
     }
     measurements.turbo = await evaluate('document.querySelector("#turbo").checked');
-    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') !== '0') ||
+    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') === '1') ||
         !await evaluate('document.querySelector("#turbo").disabled')) {
         throw new Error('Turbo selection must follow the URL and stay fixed during a run');
     }
     const runtimeArgs = await waitFor('document.querySelector("iframe").contentWindow.Module?.arguments');
+    measurements.runtime_args = runtimeArgs;
     const shift = process.env.WEB_MACHINE === 'x4pro' ? 2 : 0;
     const sleepOff = measurements.turbo || new URL(process.argv[2]).searchParams.get('sleep') === 'off';
     const icount = `shift=${shift},sleep=${sleepOff ? 'off' : 'on'}`;
@@ -329,6 +330,10 @@ smoke: try {
         measurements.display_sizes = await checkDisplaySizes(528, 792);
         measurements.settled_s = ((await waitFor('window.smokeSettledEpoch')) - start) / 1000;
         measurements.home_to_settled_s = measurements.settled_s - measurements.page_load_to_home_s;
+        measurements.status = await evaluate('document.querySelector("#status").textContent');
+        if (!measurements.status.includes(measurements.turbo ? 'Turbo (not timing-accurate)' : 'Accurate timing')) {
+            throw new Error('Status must identify the selected timing mode');
+        }
         measurements.log_lines = await evaluate('window.smokeLogLines');
         const log = await evaluate(consoleText);
         measurements.wait_lines = (log.match(/\[\d+\]\s+Wait complete:[^\r\n]+/g) || []).slice(0, 8);

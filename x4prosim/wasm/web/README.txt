@@ -27,8 +27,9 @@ provenance and licenses are in x4prosim/boot/README.md (boot-provenance.md in
 the package). Unsupported chips, invalid headers and apps over 0x640000 bytes
 are rejected. Full 16 MiB images pass through unchanged.
 The hosted copy is https://serialx.github.io/x4prosim/ (no firmware included).
-Turbo (fast, not timing-accurate) is ticked by default; untick it or open with
-?turbo=0 for accurate device timing, which is what smoke.sh measures.
+Accurate device timing is the default, as in smoke.sh. Turbo (fast, not
+timing-accurate) starts unticked; tick it or open with ?turbo=1 to opt in.
+?turbo=0 also selects accurate timing. Both modes appear in the status line.
 Alternatively put copies of your images in web-dist and open:
   http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img
   http://127.0.0.1:8000/?flash=crosspoint-1.6.5-x3-x4.bin&sd=sd.img
@@ -98,7 +99,10 @@ Python 3 is required for this comparison; no Python packages are needed.
 Remove private firmware copies from web-dist after testing.
 
 With file pickers, omit the query string and set PICKER_FLASH and PICKER_SD
-to local paths; INPUT_SD must name the same source card. Omit PICKER_SD to test
+to local paths; this tests accurate timing by default. Repeat with ?turbo=1
+to test turbo. ?turbo=0 remains accepted; ?sleep=off gives deterministic
+accurate guest timestamps for comparison with RUN_NODE_SLEEP=off in Node.
+INPUT_SD must name the same source card. Omit PICKER_SD to test
 the packaged blank card, using its blank-sd.img path for INPUT_SD.
 
 The test waits for the third completed X3_DRF refresh and the settled [MEM]

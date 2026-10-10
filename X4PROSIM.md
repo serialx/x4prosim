@@ -224,17 +224,17 @@ For larger workloads, rebuild with `WASM_INITIAL_MEMORY=<bytes>` or
 the Node accelerator setting; `RUN_NODE_SLEEP=off` disables idle-time warping
 for deterministic timing comparisons in accurate mode (`sleep=on` otherwise).
 
-**Turbo is the default** for the browser page and the Node launcher: the
-**Turbo (fast, not timing-accurate)** checkbox starts ticked and `run-node.sh`
-behaves as `TURBO=1`. Select accurate timing with `?turbo=0` in the browser or
-`TURBO=0 x4prosim/wasm/run-node.sh flash.bin sd.img`. The native launcher keeps
-accurate timing by default; `X4TURBO=1 x4prosim/run.sh flash.bin sd.img` opts
+**Accurate timing is the default** for the browser page and the Node launcher:
+the **Turbo (fast, not timing-accurate)** checkbox starts unticked and
+`run-node.sh` behaves as `TURBO=0`. Opt into turbo with `?turbo=1` in the browser
+or `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`; `?turbo=0` and `TURBO=0`
+remain accepted. The native launcher also defaults to accurate timing;
+`X4TURBO=1 x4prosim/run.sh flash.bin sd.img` opts
 in. Turbo retains `-icount` with `sleep=off`, minimizes SD and panel delays,
 and opts into GPSPI `zero-wire-time` synchronous transfers; X3 BUSY pulses
 retain a 1 ms minimum. Removing `icount` made transfer timers depend on host
-scheduling, slowing native boot and stalling Node. Turbo reaches settled
-startup in 4.789 s in Node and 5.558 s in Chrome, faster than the device end
-to end, but **changes guest timing and must not be used for timing
+scheduling, slowing native boot and stalling Node. Turbo is faster but
+**changes guest timing and must not be used for timing
 measurements**. `smoke.sh` runs accurate mode (it passes `TURBO=0`);
 `smoke.sh --turbo flash.bin sd.img` compares the panel against a fresh native
 turbo reference without requiring timestamp equality.
@@ -265,13 +265,36 @@ with this service worker. The package makes no runtime CDN requests.
 
 ### Measurements and limits
 
-CrossPoint 1.6.5 X3, Apple M5 Max (18 logical CPUs, 128 GiB RAM), macOS arm64,
-Emscripten 6.0.12, Node 26.11.0, Chrome 155. These final `MEMORY64=2` figures
-are medians of three fresh-process runs with original flash/SD copies and no
-concurrent builds or profilers. Home is the third completed `X3_DRF` refresh;
-settled is the first subsequent `[MEM]` line after thumbnail generation.
-Chrome times include navigation, image loading and startup, with GPU/WebGL on.
-Each column is an independent median, so phase medians need not sum to total.
+The 2026-10-10 stack combines inline Emscripten file I/O with amortized BQL
+locking, lock-free GPSPI CMD reads with single-access dispatch, and direct
+TB tail chaining in the wasm64 backend. These changes preserve accurate guest
+waits and panel bytes; turbo separately reduces device delays and changes guest
+timing.
+
+CrossPoint 1.6.5 X3 on an Apple M5 Max, Emscripten 6.0.12, Node 26 and
+Chrome 155, using `MEMORY64=2`. Baseline is the build before these three
+changes. Node and native figures are independent three-run medians; Chrome
+figures are single-run confirmations with GPU/WebGL.
+Home is the third completed refresh; post-Home ends at the following `[MEM]`
+checkpoint. Chrome Home starts at image loading, while settled starts at page
+load, so those columns do not sum to the post-Home interval. Accurate figures
+use `sleep=off` for deterministic comparisons; normal launches use `sleep=on`.
+
+| Runtime / mode | Baseline Home / post-Home / settled | Combined stack Home / post-Home / settled | Post-Home reduction |
+| --- | ---: | ---: | ---: |
+| Node accurate, `sleep=off` | 2.404 / 9.897 / 12.299 s | 1.953 / 7.314 / 9.255 s | 26.10% |
+| Chrome accurate, `sleep=off` | 2.829 / 11.484 / 14.835 s | 2.358 / 8.580 / 11.463 s | 25.29% |
+| Chrome turbo | 1.368 / 3.993 / 5.886 s | 1.227 / 2.929 / 4.681 s | 26.65% |
+| Native accurate, `sleep=off` | 1.776 / 8.794 / 10.573 s | 1.541 / 8.024 / 9.565 s | 8.76% |
+
+Accurate `sleep=off` preserves the first eight guest waits and the settled
+`[MEM]` timestamp of 10049 ms. Node now settles within that guest time; Chrome
+still takes longer. Native, Node and Chrome panel captures match byte for byte.
+
+The following measurements are **before the 2026-10-10 stack**. They are
+three-run medians except the older TCI results, which were not rerun and compare
+different QEMU versions. The `sleep=on` rows describe the former stack, not the
+current default's performance.
 
 | Runtime / mode | Home | Home → settled | Settled total |
 | --- | ---: | ---: | ---: |
@@ -283,23 +306,14 @@ Each column is an independent median, so phase medians need not sum to total.
 | Chrome, old TCI port (historical) | 19.79 s | — | 145.46 s |
 | Chrome JIT, accurate `sleep=off` | 3.069 s | 11.656 s | 14.758 s |
 | Chrome JIT, accurate `sleep=on` (`?turbo=0`) | 5.264 s | 14.091 s | 19.355 s |
-| Node JIT, turbo (default) | 1.097 s | 3.706 s | 4.789 s |
-| Chrome JIT, turbo (default) | 1.636 s | 3.917 s | 5.558 s |
+| Node JIT, turbo (opt-in) | 1.097 s | 3.706 s | 4.789 s |
+| Chrome JIT, turbo (opt-in) | 1.636 s | 3.917 s | 5.558 s |
 
-Accurate `sleep=off` reaches Home faster than the device in both Node and
-Chrome (guest 3.250 s), but settled startup still takes 1.24x/1.47x guest
-time (about 10.05 s). The thumbnail phase itself takes 1.48x/1.71x its
-6.799 s of guest time. The accurate-mode settled target remains unmet;
-turbo meets the numeric targets by changing device delays.
-
-All final native, Node and Chrome panel captures match byte for byte. Accurate
-`sleep=off` preserves the first eight native firmware wait timestamps;
-`sleep=on` can vary with host scheduling, including natively. Both address
-modes build and pass smoke; native Memory64 was not rebenchmarked in the final
-series. The old TCI rows were not rerun and compare different QEMU versions,
-not an isolated backend change. Earlier measurements found higher Node RSS
-with the JIT (835 MiB versus TCI 541 MiB); final RSS was not remeasured as a
-controlled comparison. Detailed experiments and rejected candidates are in
+Accurate `sleep=on` can vary with host scheduling, including natively. Both
+address modes build and pass smoke; native Memory64 was not rebenchmarked in
+the combined series. Earlier measurements found higher Node RSS with the JIT
+(835 MiB versus TCI 541 MiB); RSS was not remeasured as a controlled comparison.
+Earlier experiments and rejected candidates are in
 [the performance report](x4prosim/wasm/perf/turbo-profile.md).
 
 ### What to upstream
@@ -320,8 +334,8 @@ Keep these as separate reviewable changes, with their correctness and A/B eviden
 - SDL browser input polling that drains the proxy queue without yielding under BQL
   (`ui/sdl2.c`), for the Emscripten port.
 
-BQL batching was not retained because native Home non-regression was not
-established. Turbo changes timing and should remain separate from the
+The combined stack retains amortized BQL locking with native non-regression
+confirmed in the paired runs above. Turbo changes timing and remains separate from the
 accurate-mode optimizations. Safari and Firefox remain untested; the later
 official X4 Pro release verification is recorded below.
 
@@ -342,10 +356,11 @@ contains battery history but no books. Power draws the sleep screen, but a
 second Power press does not resume; S3 deep sleep/ext0/ext1 wake remains open.
 
 The same composed image reaches Home and the following `[MEM]` checkpoint
-under Node in default turbo and `TURBO=0`, and in Chrome with either mode.
+under Node in default accurate mode and `TURBO=1`, and in Chrome with either mode.
 The browser smoke verifies Down/Up, a pointer tap that opens Library, and Stop.
-The turbo Home PPM matches the native capture byte for byte. With the tested
-blank card, Home takes about 2.5 seconds in Node/browser turbo and 7.8–8.0 seconds
+The turbo Home PPM matches the native capture byte for byte. Before the
+2026-10-10 stack, with the tested blank card, Home took about 2.5 seconds in
+Node/browser turbo and 7.8–8.0 seconds
 in accurate mode on the M5 Max; these are individual acceptance runs.
 
 Three emulator fixes were needed: shared Wasm translation blocks now reload

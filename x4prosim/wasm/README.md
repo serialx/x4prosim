@@ -47,25 +47,39 @@ compatible dependencies. `WASM_JIT_STATS=1` enables Node JIT module counts;
 `RUN_NODE_SLEEP=off` gives deterministic idle timing for comparisons. See the
 full guide before changing the fixed 256 MiB heap or 64 MiB translation cache.
 
-Turbo is the default for `run-node.sh` and the browser page (checkbox ticked).
-Select accurate timing with `TURBO=0 x4prosim/wasm/run-node.sh flash.bin sd.img`
-or `?turbo=0`. Turbo keeps `-icount` with `sleep=off`, minimizes device delays
-and uses synchronous GPSPI transfers. It changes guest timing; `smoke.sh` tests
-accurate mode and `smoke.sh --turbo flash.bin sd.img` compares against native
-turbo without requiring timestamp equality.
+Accurate timing is the default for `run-node.sh` and the browser page (checkbox
+unticked). Opt into turbo with `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`
+or `?turbo=1`; `TURBO=0` and `?turbo=0` remain accepted. Turbo keeps `-icount`
+with `sleep=off`, minimizes device delays and uses synchronous GPSPI transfers.
+It changes guest timing; `smoke.sh` tests accurate mode and
+`smoke.sh --turbo flash.bin sd.img` compares against native turbo without
+requiring timestamp equality.
 
-Final M5 Max three-run medians (`MEMORY64=2`, seconds):
+The 2026-10-10 stack combines inline Emscripten file I/O with amortized BQL
+locking, lock-free GPSPI CMD reads with single-access dispatch, and direct
+TB tail chaining in the wasm64 backend. These changes preserve accurate guest
+waits and panel bytes; turbo separately reduces device delays and changes guest
+timing.
 
-| Runtime / mode | Home | Settled |
-| --- | ---: | ---: |
-| Node accurate, `sleep=off` | 2.394 | 12.464 |
-| Chrome accurate, `?sleep=off` | 3.069 | 14.758 |
-| Node turbo | 1.097 | 4.789 |
-| Chrome turbo | 1.636 | 5.558 |
+CrossPoint 1.6.5 X3 on an Apple M5 Max, Emscripten 6.0.12, Node 26 and
+Chrome 155, using `MEMORY64=2`. Baseline is the build before these three
+changes. Node and native figures are independent three-run medians; Chrome
+figures are single-run confirmations with GPU/WebGL.
+Home is the third completed refresh; post-Home ends at the following `[MEM]`
+checkpoint. Chrome Home starts at image loading, while settled starts at page
+load, so those columns do not sum to the post-Home interval. Accurate figures
+use `sleep=off` for deterministic comparisons; normal launches use `sleep=on`.
 
-Accurate mode beats guest time to Home (3.250 s), but misses settled startup
-(about 10.05 s); turbo beats both by changing delays. Both address modes build
-and pass smoke. The hosted page is <https://serialx.github.io/x4prosim/>.
+| Runtime / mode | Baseline Home / post-Home / settled | Combined stack Home / post-Home / settled | Post-Home reduction |
+| --- | ---: | ---: | ---: |
+| Node accurate, `sleep=off` | 2.404 / 9.897 / 12.299 s | 1.953 / 7.314 / 9.255 s | 26.10% |
+| Chrome accurate, `sleep=off` | 2.829 / 11.484 / 14.835 s | 2.358 / 8.580 / 11.463 s | 25.29% |
+| Chrome turbo | 1.368 / 3.993 / 5.886 s | 1.227 / 2.929 / 4.681 s | 26.65% |
+| Native accurate, `sleep=off` | 1.776 / 8.794 / 10.573 s | 1.541 / 8.024 / 9.565 s | 8.76% |
+
+With `sleep=off`, accurate Node now settles within about 10.05 s of guest time;
+Chrome still takes longer. Both address modes build and pass smoke. The hosted page is
+<https://serialx.github.io/x4prosim/>.
 Official CrossPoint 1.6.5 X4 Pro now reaches Home in native, Node and Chrome,
 including accurate and turbo modes; the browser verifies Down/Up and a pointer
 tap into Library. This requires the shared-TB CPU context reload, UC8179 timer

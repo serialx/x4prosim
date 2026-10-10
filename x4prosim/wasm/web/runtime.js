@@ -56,7 +56,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
         snapshot = data.type;
         command('stop\ninfo status');
     } else if (data.type === 'boot') {
-        const {machine, flash, sd, rom, turbo} = data;
+        const {machine, flash, sd, rom, turbo = false} = data;
         // Keep the default pacing; allow deterministic benchmark runs to opt out.
         const sleep = turbo || new URLSearchParams(parent.location.search).get('sleep') === 'off' ? 'off' : 'on';
         window.Module = {
