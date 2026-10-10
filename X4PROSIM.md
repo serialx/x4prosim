@@ -180,9 +180,16 @@ directories. QEMU configure can download missing Python packages/subprojects.
 
 ### Run, package and verify
 
-Open `http://127.0.0.1:8000`, choose a 16 MiB flash image and optionally an SD
-image, or use `?flash=flash.bin&sd=sd.img` with copies in the served directory.
-Bootloader byte 12 equal to 5 selects X3; otherwise the launcher selects X4 Pro.
+Open `http://127.0.0.1:8000`, choose an official CrossPoint release app `.bin`
+or a 16 MiB flash dump and optionally an SD image. Use
+`crosspoint-<ver>-x3-x4.bin` for X3 or `crosspoint-<ver>-x4pro.bin` for X4 Pro
+from the [CrossPoint releases](https://github.com/crosspoint-reader/crosspoint-reader/releases).
+The browser adds the bundled bootloader, partition table and C3 NVS seed;
+app bytes stay unchanged. No esptool or PlatformIO is needed.
+`?flash=flash.bin&sd=sd.img` accepts either input kind from a URL; for example,
+`?flash=crosspoint-1.6.5-x3-x4.bin&sd=sd.img` with copies in the served directory.
+App header chip IDs 5 and 9 select X3 and X4 Pro; unsupported IDs are rejected.
+For full dumps, bootloader byte 12 equal to 5 selects X3; otherwise X4 Pro.
 The browser has a portrait SDL panel, CDC log, keys and X4 Pro pointer input.
 Reset resets the guest; Stop retains the SD in page memory for the next Start.
 Download SD image saves guest writes. Closing or reloading loses unsaved
@@ -235,8 +242,9 @@ The separate `wasm` job leaves the native build matrix unchanged. It runs
 `build-deps.sh`, `build.sh --web` (which calls `package-web.sh`) and
 `smoke.sh --rom-only`, then uploads `x4prosim-<version>-wasm`. The wasm64
 sysroot/compiler cache key includes the SDK version and dependency recipes.
-The artifact contains both emulators, ROMs, browser assets and the blank card;
-it contains no firmware or user SD images.
+The artifact contains both emulators, ROMs, browser assets, boot assets from
+[x4prosim/boot/](x4prosim/boot/README.md) and the blank card;
+it contains no firmware apps or user SD images.
 
 Pages uploads and deploys only on **pushes to `serialx/wasm-jit` in
 `serialx/x4prosim`**, to <https://serialx.github.io/x4prosim/>.

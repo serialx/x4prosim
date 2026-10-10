@@ -1,0 +1,104 @@
+Browser official CrossPoint release acceptance — 2026-10-10
+
+PASS: all three required browser runs and Node ROM-only smoke.
+No QEMU rebuild, app modification, firmware commit or push.
+
+Implementation:
+- package-web.sh copies C3/S3 bootloaders and licenses, generates partitions.bin
+  with mkflash.partition_table() and nvs-x3.bin with mknvs.image().
+- Browser picker and ?flash= accept 16 MiB dumps unchanged, or ESP app images.
+  Supported app chips: 5/C3/X3 and 9/S3/X4 Pro. App0 size limit: 0x640000.
+  C3 NVS seed and erased S3 NVS match the Python composer.
+- Page status reports composition. smoke.mjs observes the prepared buffer before
+  transfer to QEMU, hashes it with crypto.subtle, and compares SHA256 to a fresh
+  mkflash.py output. Temporary Python reference images are removed immediately.
+- UI describes both release filenames and links to the CrossPoint releases.
+- No design deviation. Runtime and QEMU code unchanged.
+
+Environment:
+macOS arm64, Apple M5 Max, Chrome 155.0.8059.39, Node 26, MEMORY64=2.
+GPU enabled: ANGLE Metal Renderer: Apple M5 Max. Default Turbo selected.
+Existing 1 GiB SD image used in all three runs; input bytes unchanged.
+No timing benchmark claim: these are single acceptance runs.
+
+Preparation:
+x4prosim/wasm/package-web.sh
+python3 x4prosim/wasm/serve.py build-wasm-32limit/web-dist
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=9224 --user-data-dir=/tmp/x4prosim-chrome-official --no-first-run about:blank
+
+Official source directory:
+/private/tmp/claude-501/-Users-serialx-orca-workspaces-x4prosim-wasm/006336e6-0476-434a-b4fa-3c6fbee22806/scratchpad/official/
+Below <official> names this directory. Commands ran at the repository root.
+SD source was $PWD/build-wasm-32limit/web-dist/sd.img.
+
+(1) Official app via picker:
+PICKER_FLASH=<official>/crosspoint-1.6.5-x3-x4.bin PICKER_SD=<sd-source> INPUT_SD=<sd-source> EVIDENCE_DIR=build-wasm/evidence/web-official/picker node x4prosim/wasm/web/smoke.mjs http://127.0.0.1:8000/
+
+(2) Existing 16 MiB flash via URL:
+INPUT_SD=<sd-source> EVIDENCE_DIR=build-wasm/evidence/web-official/full-url node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
+
+(3) Official app via URL (temporary copy in web-dist):
+RELEASE_APP=<official>/crosspoint-1.6.5-x3-x4.bin INPUT_SD=<sd-source> EVIDENCE_DIR=build-wasm/evidence/web-official/app-url node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/?flash=crosspoint-1.6.5-x3-x4.bin&sd=sd.img'
+
+All three runs: third X3 panel refresh, settled MEM checkpoint, portrait canvas,
+Down changes canvas, keyboard Up changes canvas, SD download retains guest
+writes, Reset reaches ROM, Stop removes iframe/workers and keeps SD bytes.
+Picker screenshot visually inspected: correct release filename/hint and X3 Home.
+
+Results (Home is page app-start to third refresh; settled includes navigation):
+picker: PASS; Home 1.569 s, settled 6.826 s
+  Browser SHA256 = Python SHA256 = 80b8d1de62ff9ade1bf5770177e23283677ce13427b724a3e7091409fab8b12a
+  Observed status: Composed 16 MiB flash from release app · loading SD image…
+full-url: PASS; Home 1.571 s, settled 5.546 s
+app-url: PASS; Home 1.769 s, settled 6.262 s
+  Browser SHA256 = Python SHA256 = 80b8d1de62ff9ade1bf5770177e23283677ce13427b724a3e7091409fab8b12a
+  Observed status: Composed 16 MiB flash from release app · loading SD image…
+
+Additional checks:
+EVIDENCE_DIR="$PWD/build-wasm/evidence/web-official/rom" x4prosim/wasm/smoke.sh --rom-only
+PASS: X4 Pro blank-flash ROM and panel screendump.
+python3 -m unittest x4prosim.tests.test_mkflash -v
+PASS: 7 tests, optional release/reference test skipped (covered above in Chrome).
+node --check x4prosim/wasm/web/app.js
+node --check x4prosim/wasm/web/smoke.mjs
+PASS, plus git diff --check.
+
+In-page prepareFlash checks over CDP:
+{
+  "errors": [
+    {
+      "name": "wrong magic",
+      "message": "Choose an official CrossPoint release .bin or a 16 MiB flash dump (16777216 bytes)."
+    },
+    {
+      "name": "truncated header",
+      "message": "Choose an official CrossPoint release .bin or a 16 MiB flash dump (16777216 bytes)."
+    },
+    {
+      "name": "unsupported chip",
+      "message": "Unsupported ESP chip ID 7; expected ESP32-C3 (5) or ESP32-S3 (9)."
+    },
+    {
+      "name": "oversized app",
+      "message": "App image exceeds the CrossPoint app0 partition (6553600 bytes)."
+    }
+  ],
+  "s3": {
+    "machine": "x4pro",
+    "sha256": "1f418cec5fdd01929562c5091386236a22547fbe485c4555ec79f919e960e76c"
+  },
+  "full_image_passthrough": true
+}
+
+S3 composition hash matches Task 1's Python-composed image. This check did not
+boot S3 in Chrome; X4 Pro browser firmware boot remains Task 3's scope.
+
+Evidence directories contain web.log, web-measurements.json, Home/Down/keyboard
+screenshots and SD downloads for each run; rom/ contains Node ROM evidence.
+Ignore sampled CPU/RSS values: the picker run supplied a helper PID, not the
+main Chrome PID, and the other two runs did not enable process sampling.
+
+Cleanup:
+Stopped the task's serve.py PID 94762 and isolated Chrome PID 94921.
+Removed both added release app copies from web-dist; pre-existing flash.bin and
+sd.img were left in place. No firmware files are staged or committed.

@@ -26,7 +26,20 @@ the lowered mode is the portable option. Emulator acceptance covers Chrome
 `smoke.sh --rom-only` needs no firmware. Smoke copies both input images;
 `run-node.sh` copies flash but writes the supplied SD directly. Use copies.
 Evidence defaults to `build-wasm/evidence/smoke` in either mode.
-`package-web.sh` packages existing binaries without rebuilding.
+`package-web.sh` packages existing binaries without rebuilding, copies the
+C3/S3 bootloaders and licenses, and generates the partition table and C3 NVS
+seed with the Python helpers in `x4prosim/`.
+
+The browser accepts an official CrossPoint release app `.bin` or a 16 MiB
+flash dump through its picker or `?flash=<url>`. Use
+`crosspoint-<ver>-x3-x4.bin` for X3, `crosspoint-<ver>-x4pro.bin` for X4 Pro.
+Download apps from the [CrossPoint releases](https://github.com/crosspoint-reader/crosspoint-reader/releases).
+App images are composed in browser memory with the bundled boot assets;
+no esptool or PlatformIO is needed. Full flash dumps pass through unchanged.
+The browser smoke test accepts `PICKER_FLASH=<app.bin>` or
+`RELEASE_APP=<local-app.bin>` for a URL input, verifies composition status,
+and compares SHA256 against `mkflash.py` output before checking X3 Home and
+controls. See [web/README.txt](web/README.txt) for complete commands.
 
 `WASM_SYSROOT=/absolute/path/to/sysroot-wasm64` lets both build scripts reuse
 compatible dependencies. `WASM_JIT_STATS=1` enables Node JIT module counts;

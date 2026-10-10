@@ -15,14 +15,26 @@ packages are used. Chrome 155 is verified with GPU/WebGL enabled. Native
 Memory64 is also available in this Chrome version without experimental flags;
 older browsers may require MEMORY64=2. Firefox and Safari are not verified.
 
-Open http://127.0.0.1:8000 and select a 16 MiB flash image and optional SD image.
+Open http://127.0.0.1:8000 and select an official CrossPoint release app .bin
+or a 16 MiB flash dump, plus an optional SD image. Release assets:
+  X3:     crosspoint-<ver>-x3-x4.bin
+  X4 Pro: crosspoint-<ver>-x4pro.bin
+  https://github.com/crosspoint-reader/crosspoint-reader/releases
+The browser composes release apps into 16 MiB flash using bundled C3/S3
+bootloaders, the CrossPoint partition table and the C3-only NVS device seed.
+App bytes stay unchanged. No esptool or PlatformIO is needed. Boot asset
+provenance and licenses are in x4prosim/boot/README.md (boot-provenance.md in
+the package). Unsupported chips, invalid headers and apps over 0x640000 bytes
+are rejected. Full 16 MiB images pass through unchanged.
 The hosted copy is https://serialx.github.io/x4prosim/ (no firmware included).
 Turbo (fast, not timing-accurate) is ticked by default; untick it or open with
 ?turbo=0 for accurate device timing, which is what smoke.sh measures.
 Alternatively put copies of your images in web-dist and open:
   http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img
+  http://127.0.0.1:8000/?flash=crosspoint-1.6.5-x3-x4.bin&sd=sd.img
 Query images must be same-origin or provide appropriate CORS/CORP headers.
-Byte 12 equal to 5 selects X3; other values select X4 Pro, matching run.sh.
+For full images, bootloader byte 12 equal to 5 selects X3; other values select
+X4 Pro, matching run.sh. App images use chip ID 5 (C3) or 9 (S3) in their header.
 
 The server sets COOP and COEP for SharedArrayBuffer and pthreads. For a remote
 host use HTTPS and the same headers; plain HTTP works only on localhost. A
@@ -64,6 +76,18 @@ Automated acceptance (Node 22+ and Chrome; no npm dependencies):
     --user-data-dir=/tmp/x4prosim-chrome --no-first-run about:blank
   INPUT_SD=/absolute/path/to/sd.img node x4prosim/wasm/web/smoke.mjs \
     'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
+
+Official release acceptance also compares the browser-composed buffer's SHA256
+(using crypto.subtle before transfer to QEMU) with mkflash.py output:
+  PICKER_FLASH=/absolute/path/to/crosspoint-1.6.5-x3-x4.bin \
+    PICKER_SD=/absolute/path/to/sd.img INPUT_SD=/absolute/path/to/sd.img \
+    node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/'
+For a release app URL, set RELEASE_APP to the same file's local path:
+  RELEASE_APP=/absolute/path/to/crosspoint-1.6.5-x3-x4.bin \
+    INPUT_SD=/absolute/path/to/sd.img node x4prosim/wasm/web/smoke.mjs \
+    'http://127.0.0.1:8000/?flash=crosspoint-1.6.5-x3-x4.bin&sd=sd.img'
+Python 3 is required for this comparison; no Python packages are needed.
+Remove private firmware copies from web-dist after testing.
 
 With file pickers, omit the query string and set PICKER_FLASH and PICKER_SD
 to local paths; INPUT_SD must name the same source card. Omit PICKER_SD to test
