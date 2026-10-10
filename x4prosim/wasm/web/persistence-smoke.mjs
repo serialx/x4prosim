@@ -118,8 +118,8 @@ try {
         const boot = async () => {
             const {root} = await call('DOM.getDocument');
             const {nodeId} = await call('DOM.querySelector', {nodeId: root.nodeId, selector: '#flash'});
+            // Choosing the firmware starts the emulator.
             await call('DOM.setFileInputFiles', {nodeId, files: [path.resolve(process.env.PICKER_FLASH)]});
-            await evaluate('document.querySelector("#start").click()');
             await waitFor('document.querySelector("#status").textContent.includes(" · Ready · ")');
         };
         await boot();

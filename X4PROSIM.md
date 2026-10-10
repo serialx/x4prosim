@@ -231,11 +231,11 @@ For larger workloads, rebuild with `WASM_INITIAL_MEMORY=<bytes>` or
 the Node accelerator setting; `RUN_NODE_SLEEP=off` disables idle-time warping
 for deterministic timing comparisons in accurate mode (`sleep=on` otherwise).
 
-**Accurate timing is the default** for the browser page and the Node launcher:
-the **Turbo (fast, not timing-accurate)** checkbox starts unticked and
-`run-node.sh` behaves as `TURBO=0`. Opt into turbo with `?turbo=1` in the browser
-or `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`; `?turbo=0` and `TURBO=0`
-remain accepted. The native launcher also defaults to accurate timing;
+**The browser page defaults to turbo**: the **Turbo (fast, not
+timing-accurate)** checkbox starts ticked; untick it or use `?turbo=0` for
+accurate timing (`?turbo=1` remains accepted). **The Node launcher defaults to
+accurate timing** (`run-node.sh` behaves as `TURBO=0`); opt in with
+`TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`. The native launcher also defaults to accurate timing;
 `X4TURBO=1 x4prosim/run.sh flash.bin sd.img` opts
 in. Turbo retains `-icount` with `sleep=off`, minimizes SD and panel delays,
 and opts into GPSPI `zero-wire-time` synchronous transfers; X3 BUSY pulses

@@ -116,6 +116,10 @@ const consoleText = 'document.querySelector("#console")?.textContent';
 const canvas = 'document.querySelector("iframe").contentDocument.querySelector("canvas")';
 async function checkDisplaySizes(width, height) {
     const results = [];
+    // Fit (the default) may resample; Auto must keep whole physical pixels.
+    const selectZoom = value => evaluate(`(() => { const s = document.querySelector('#zoom-level');
+        s.value = ${JSON.stringify(value)}; s.dispatchEvent(new Event('change')); })()`);
+    await selectZoom('auto');
     // Exercise Retina, fractional browser zoom, narrow layouts, and a viewport
     // too small for 1x (which must scroll rather than downsample the panel).
     for (const [viewport, dpr] of [[1400, 1], [1400, 2], [900, 1.5], [390, 3], [270, 1], [1400, 1.25]]) {
@@ -145,6 +149,7 @@ async function checkDisplaySizes(width, height) {
         }
         results.push({viewport, dpr, ...size});
     }
+    await selectZoom('fit');
     return results;
 }
 const measurements = {host_cpu: os.cpus()[0].model, host_logical_cpus: os.cpus().length,
@@ -201,12 +206,12 @@ smoke: try {
         await waitFor('crossOriginIsolated && document.querySelector("#flash")');
         await call('DOM.enable');
         const {root} = await call('DOM.getDocument');
-        for (const [selector, file] of [['#flash', process.env.PICKER_FLASH], ['#sd', process.env.PICKER_SD]]) {
+        // Choosing the firmware starts the emulator, so the SD card goes first.
+        for (const [selector, file] of [['#sd', process.env.PICKER_SD], ['#flash', process.env.PICKER_FLASH]]) {
             if (!file) continue;
             const {nodeId} = await call('DOM.querySelector', {nodeId: root.nodeId, selector});
             await call('DOM.setFileInputFiles', {nodeId, files: [path.resolve(file)]});
         }
-        await evaluate('document.querySelector("#start").click()');
         measurements.file_pickers = true;
     }
     await waitFor('crossOriginIsolated && document.querySelector("iframe")');
@@ -222,7 +227,7 @@ smoke: try {
         }
     }
     measurements.turbo = await evaluate('document.querySelector("#turbo").checked');
-    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') === '1') ||
+    if (measurements.turbo !== (new URL(process.argv[2]).searchParams.get('turbo') !== '0') ||
         !await evaluate('document.querySelector("#turbo").disabled')) {
         throw new Error('Turbo selection must follow the URL and stay fixed during a run');
     }
@@ -399,7 +404,7 @@ smoke: try {
         }
         await screenshot('web-home.png');
         const before = await evaluate(`${canvas}.toDataURL()`);
-        await evaluate('document.querySelector("#keys button:nth-child(6)").click()');
+        await evaluate(`Array.from(document.querySelectorAll('#keys button')).find(b => b.textContent === 'Down').click()`);
         await waitFor(`${canvas}.toDataURL() !== ${JSON.stringify(before)}`);
         await delay(1500);
         await screenshot('web-down.png');

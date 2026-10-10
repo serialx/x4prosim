@@ -1,8 +1,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-// Accurate timing is the default; only ?turbo=1 opts into turbo.
-$('turbo').checked = params.get('turbo') === '1';
+// Turbo is the default; ?turbo=0 selects accurate timing.
+$('turbo').checked = params.get('turbo') !== '0';
 $('wifi').checked = params.get('wifi') !== 'off';
 let frame, bootData, pending = false, running = false;
 // The page owns the SD image while the emulator is not running; the runtime
@@ -16,22 +16,94 @@ const bindings = {Back: 'Backspace', Confirm: 'Enter', Left: 'ArrowLeft',
 const post = (data, transfer = []) => frame?.contentWindow.postMessage(data, location.origin, transfer);
 const status = text => { $('status').textContent = text; };
 const timingLabel = () => $('turbo').checked ? 'Turbo (not timing-accurate)' : 'Accurate timing';
-function resizeScreen() {
-    if (!frame) return;
+// Screen size: 'fit' (the default; fills the stage, may resample), 'auto'
+// (the largest whole-pixel size up to 100% that fits the width) or a chosen
+// CSS scale in whole physical pixels.
+let zoomMode = 'fit';
+try {
+    const saved = localStorage.getItem('x4prosim-zoom');
+    zoomMode = saved === 'auto' ? 'auto' : Number(saved) || 'fit';
+} catch {}
+function screenLayout() {
     const dpr = window.devicePixelRatio || 1;
     const width = Number(frame.width), height = Number(frame.height);
-    const available = document.querySelector('.device').clientWidth - 18;
+    const padding = (element, axis) => {
+        const style = getComputedStyle(element);
+        return axis === 'x' ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) :
+            parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    };
+    const app = document.querySelector('.app'), style = getComputedStyle(app);
+    const device = document.querySelector('.device'), bezel = document.querySelector('.bezel');
+    let availableWidth, availableHeight;
+    if (style.display === 'grid') {
+        // The stage shrinks to the device, so measure what the side panels leave.
+        availableWidth = app.clientWidth - parseFloat(style.getPropertyValue('--sd-max')) -
+            parseFloat(style.getPropertyValue('--output-min'));
+        availableHeight = document.querySelector('.stage').clientHeight -
+            document.querySelector('.stage-bar').offsetHeight - $('keys').offsetHeight -
+            padding(device, 'y') - padding(bezel, 'y');
+    } else {
+        // One column: the page scrolls, so only the width limits the screen.
+        availableWidth = device.clientWidth;
+        availableHeight = Infinity;
+    }
+    availableWidth -= padding(device, 'x') + padding(bezel, 'x');
+    const auto = Math.max(1, Math.min(Math.floor(dpr), Math.floor(availableWidth * dpr / width)));
+    const fit = Math.max(0.25, Math.min(availableWidth / width, availableHeight / height));
+    return {dpr, width, height, auto, fit, max: Math.max(auto, 2 * Math.ceil(dpr))};
+}
+function screenScale(layout) {
+    if (zoomMode === 'fit') return layout.fit;
+    if (zoomMode === 'auto') return layout.auto / layout.dpr;
+    return Math.min(layout.max, Math.max(1, Math.round(zoomMode * layout.dpr))) / layout.dpr;
+}
+function zoomOptions(layout, scale) {
+    const percent = value => `${Math.round(value * 100)}%`;
+    const options = [['fit', `Fit · ${percent(layout.fit)}`], ['auto', `Auto · ${percent(layout.auto / layout.dpr)}`]];
+    for (let pixels = 1; pixels <= layout.max; pixels++) options.push([String(pixels / layout.dpr), percent(pixels / layout.dpr)]);
+    const selected = zoomMode === 'fit' || zoomMode === 'auto' ? zoomMode : String(scale);
+    $('zoom-level').replaceChildren(...options.map(([value, label]) => new Option(label, value, false, value === selected)));
+}
+function resizeScreen() {
+    if (!frame) return;
     // Keep SDL's viewport at the panel resolution. Resizing it to the layout
     // resamples the framebuffer before the browser ever draws the canvas.
-    // Prefer native CSS size, fitting smaller screens in whole physical pixels.
-    // If even 1x cannot fit, the device section scrolls instead of losing pixels.
-    const pixels = Math.max(1, Math.min(Math.floor(dpr), Math.floor(available * dpr / width)));
-    const scale = pixels / dpr;
-    $('screen').style.width = `${width * scale}px`;
-    $('screen').style.height = `${height * scale}px`;
+    // Auto and the percentage steps use whole physical pixels; if even 1x
+    // cannot fit, the device section scrolls instead of losing pixels.
+    const layout = screenLayout(), scale = screenScale(layout);
+    $('screen').style.width = `${layout.width * scale}px`;
+    $('screen').style.height = `${layout.height * scale}px`;
     frame.style.transform = `scale(${scale})`;
+    const pixels = scale * layout.dpr, exact = Math.abs(pixels - Math.round(pixels)) < 1e-6;
+    // Whole pixels stay sharp; a fractional Fit scale reads better smoothed.
+    const canvas = frame.contentDocument?.querySelector('canvas');
+    if (canvas) canvas.style.imageRendering = exact ? '' : 'auto';
+    zoomOptions(layout, scale);
+    $('zoom-out').disabled = pixels <= 1 + 1e-6;
+    $('zoom-in').disabled = pixels >= layout.max - 1e-6;
 }
-new ResizeObserver(resizeScreen).observe(document.querySelector('.device'));
+function setZoom(mode) {
+    zoomMode = mode;
+    try {
+        if (mode === 'fit') localStorage.removeItem('x4prosim-zoom');
+        else localStorage.setItem('x4prosim-zoom', String(mode));
+    } catch {}
+    resizeScreen();
+}
+function stepZoom(direction) {
+    if (!frame) return;
+    // Steps land on whole physical pixels, also when leaving Fit.
+    const layout = screenLayout(), pixels = screenScale(layout) * layout.dpr;
+    const next = direction > 0 ? Math.floor(pixels + 1e-6) + 1 : Math.ceil(pixels - 1e-6) - 1;
+    setZoom(Math.min(layout.max, Math.max(1, next)) / layout.dpr);
+}
+$('zoom-in').addEventListener('click', () => stepZoom(1));
+$('zoom-out').addEventListener('click', () => stepZoom(-1));
+$('zoom-level').addEventListener('change', () => {
+    const value = $('zoom-level').value;
+    setZoom(value === 'fit' || value === 'auto' ? value : Number(value));
+});
+for (const element of ['.app', '.stage']) new ResizeObserver(resizeScreen).observe(document.querySelector(element));
 window.addEventListener('resize', resizeScreen);
 function watchPixelRatio() {
     // Moving between monitors can change DPR without changing the layout width.
@@ -40,12 +112,30 @@ function watchPixelRatio() {
     }, {once: true});
 }
 watchPixelRatio();
-function append(line) {
-    $('console').textContent += line + '\n';
-    if ($('console').textContent.length > 1000000) {
-        $('console').textContent = $('console').textContent.slice(-800000);
-    }
+/* Console: the full log is kept in consoleText; the filter only hides lines. */
+let consoleText = '', consoleFilter = '';
+const consoleMatches = line => !consoleFilter || line.toLowerCase().includes(consoleFilter);
+function renderConsole() {
+    $('console').textContent = consoleFilter ?
+        consoleText.split('\n').filter(line => line && consoleMatches(line)).map(line => line + '\n').join('') : consoleText;
     $('console').scrollTop = $('console').scrollHeight;
+}
+function clearConsole() { consoleText = ''; renderConsole(); }
+$('console-filter').addEventListener('input', () => {
+    consoleFilter = $('console-filter').value.trim().toLowerCase();
+    renderConsole();
+});
+$('console-clear').addEventListener('click', clearConsole);
+function append(line) {
+    const view = $('console');
+    // Follow new output unless the reader has scrolled up.
+    const follow = view.scrollHeight - view.scrollTop - view.clientHeight < 32;
+    consoleText += line + '\n';
+    if (consoleText.length > 1000000) {
+        consoleText = consoleText.slice(-800000);
+        renderConsole();
+    } else if (consoleMatches(line)) view.append(line + '\n');
+    if (follow) view.scrollTop = view.scrollHeight;
     if (/Wait complete:\s+(?:8179|8279|X3)_DRF/.test(line) && ++milestones === 3) {
         const seconds = (performance.now() - startedAt) / 1000;
         status(`${/8179_DRF/.test(line) ? 'X4 Pro' : 'X3'} · ${timingLabel()} · Home drawn in ${seconds.toFixed(2)} s · finishing startup…`);
@@ -66,7 +156,23 @@ function key(code, down) {
     post({type: 'key', code, down});
 }
 function release() { for (const code of held) key(code, false); }
+/* Option help: hover or keyboard focus shows it; a click (or tap) pins it. */
+function closeTips() {
+    let open = false;
+    for (const button of document.querySelectorAll('.info[aria-expanded="true"]')) {
+        button.setAttribute('aria-expanded', 'false'); open = true;
+    }
+    return open;
+}
+for (const button of document.querySelectorAll('.info')) button.addEventListener('click', () => {
+    const open = button.getAttribute('aria-expanded') !== 'true';
+    closeTips();
+    button.setAttribute('aria-expanded', String(open));
+});
+document.addEventListener('click', event => { if (!event.target.closest('.option')) closeTips(); });
 for (const type of ['keydown', 'keyup']) document.addEventListener(type, event => {
+    // Escape closes open help before it reaches the device as Back.
+    if (event.code === 'Escape' && type === 'keydown' && closeTips()) { event.preventDefault(); return; }
     if (!frame || event.target.tagName === 'INPUT' || event.target.closest('.sd') ||
         event.ctrlKey || event.metaKey || event.altKey) return;
     if (Object.values(bindings).concat('Escape').includes(event.code)) {
@@ -74,11 +180,19 @@ for (const type of ['keydown', 'keyup']) document.addEventListener(type, event =
     }
 });
 window.addEventListener('blur', release);
+const keyHints = {Back: 'Esc', Confirm: 'Enter', Left: '←', Right: '→', Up: '↑', Down: '↓', Power: 'P', Home: 'Home'};
 function buttons(machine) {
     $('keys').replaceChildren();
-    for (const name of machine === 'x3' ? Object.keys(bindings).filter(name => name !== 'Home') : ['Home', 'Up', 'Down', 'Power']) {
+    $('keys').dataset.machine = machine;
+    $('key-hint').textContent = machine === 'x3' ? 'Keyboard: arrows · Enter · Esc · P' :
+        'Keyboard: ↑ ↓ · Home · P · touch the screen';
+    const names = machine === 'x3' ? ['Back', 'Confirm', 'Up', 'Down', 'Left', 'Right', 'Power'] : ['Home', 'Up', 'Down', 'Power'];
+    for (const name of names) {
         const button = document.createElement('button');
+        button.type = 'button';
         button.textContent = name;
+        // The hint is CSS-generated so the button's text stays the key name.
+        button.dataset.kbd = keyHints[name];
         button.addEventListener('pointerdown', event => {
             event.preventDefault(); button.setPointerCapture(event.pointerId);
             button.classList.add('held'); key(bindings[name], true);
@@ -109,6 +223,61 @@ function saveBlob(bytes, name) {
     link.href = url; link.download = name; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+/* Page chrome: run state, firmware chip, screenshot, theme and mobile tabs. */
+const machineNames = {x3: 'Xteink X3 · 528 × 792', x4pro: 'Xteink X4 Pro · 480 × 800'};
+function setLive(machine) {
+    document.querySelector('.app').classList.toggle('live', !!machine);
+    $('machine').textContent = machine ? machineNames[machine] : 'No device running';
+    for (const id of ['zoom-in', 'zoom-out', 'zoom-level', 'screenshot']) $(id).disabled = !machine;
+}
+async function describeFlash() {
+    const file = $('flash').files[0];
+    if (!file) return;
+    $('flash-name').textContent = file.name;
+    $('flash-name').classList.remove('empty');
+    const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    const chip = file.size === 0x1000000 ? (head[12] === 5 ? 5 : 9) :
+        head[0] === 0xe9 && head.length >= 14 ? head[12] | head[13] << 8 : -1;
+    const machine = {5: 'X3', 9: 'X4 Pro'}[chip];
+    if (frame || pending) return;
+    // Choosing a firmware starts it; Start reruns the same file after Stop.
+    if (machine) start();
+    else status('This file is not an ESP32-C3 or ESP32-S3 firmware image.');
+}
+$('flash').addEventListener('change', describeFlash);
+if (params.has('flash')) {
+    $('flash-name').textContent = params.get('flash').split('/').pop();
+    $('flash-name').classList.remove('empty');
+}
+$('screenshot').addEventListener('click', () => {
+    const canvas = frame?.contentDocument?.querySelector('canvas');
+    canvas?.toBlob(blob => blob && saveBlob(blob, `${frame.title.startsWith('X3') ? 'x3' : 'x4pro'}-screen.png`));
+});
+function currentTheme() {
+    return document.documentElement.dataset.theme ||
+        (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function paintThemeButton() {
+    const dark = currentTheme() === 'dark';
+    $('theme').setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    $('theme').querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+}
+$('theme').addEventListener('click', () => {
+    const theme = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('x4prosim-theme', theme); } catch {}
+    paintThemeButton();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintThemeButton);
+paintThemeButton();
+for (const tab of document.querySelectorAll('.tabs [role=tab]')) tab.addEventListener('click', () => {
+    document.querySelector('.app').dataset.tab = tab.dataset.tab;
+    for (const other of document.querySelectorAll('.tabs [role=tab]')) {
+        other.setAttribute('aria-selected', String(other === tab));
+    }
+    if (tab.dataset.tab === 'console') $('console').scrollTop = $('console').scrollHeight;
+});
+
 async function prepareFlash(input) {
     const bytes = new Uint8Array(input);
     if (bytes.length === 0x1000000) {
@@ -223,7 +392,7 @@ async function start() {
     if (frame || pending) return;
     pending = true;
     startedAt = performance.now(); milestones = 0; window.bootTimeSeconds = null;
-    $('start').disabled = true; $('console').textContent = '';
+    $('start').disabled = true; clearConsole();
     for (const id of ['flash', 'sd', 'turbo', 'wifi', 'reset', 'stop', 'download']) $(id).disabled = true;
     try {
         if (!crossOriginIsolated) throw new Error('SharedArrayBuffer needs isolation headers. Serve this folder with serve.py on localhost or HTTPS.');
@@ -251,7 +420,10 @@ async function start() {
         frame.height = machine === 'x3' ? '792' : '800';
         frame.title = `${machine === 'x3' ? 'X3' : 'X4 Pro'} display`;
         frame.src = 'runtime.html';
+        // The canvas exists once the runtime page loads; size it then too.
+        frame.addEventListener('load', resizeScreen);
         $('screen').replaceChildren(frame);
+        setLive(machine);
         resizeScreen();
         status(`${composition}Booting ${machine === 'x3' ? 'X3 (ESP32-C3)' : 'X4 Pro (ESP32-S3)'} · ${timingLabel()}…`);
     } catch (error) { fail(error.message); }
@@ -277,7 +449,7 @@ window.addEventListener('message', ({source, origin, data}) => {
     }
     if (data.type === 'boot-error') {
         sdImage = new Uint8Array(data.sd);
-        release(); frame.remove(); frame = null;
+        release(); frame.remove(); frame = null; setLive(null);
         $('keys').replaceChildren();
         $('screen').textContent = 'Could not start Wi-Fi. Retry or disable Wi-Fi downloads.';
         adoptSD();
@@ -304,7 +476,7 @@ window.addEventListener('message', ({source, origin, data}) => {
             saveBlob(data.bytes, 'sd.img');
             for (const id of ['download', 'reset', 'stop']) $(id).disabled = false;
         } else {
-            release(); frame.remove(); frame = null; running = false;
+            release(); frame.remove(); frame = null; running = false; setLive(null);
             sdAbort('The emulator stopped.');
             $('screen').textContent = 'Stopped. Start again to use the current SD card.';
             $('keys').replaceChildren();
@@ -354,7 +526,8 @@ function sdClear() {
 }
 function sdSetEnabled(enabled) {
     const on = enabled && sd.ready && !sd.busy;
-    for (const button of sdPanel.querySelectorAll('button')) {
+    // The image download works even when the explorer cannot read the card.
+    for (const button of sdPanel.querySelectorAll('button:not(#download)')) {
         button.disabled = !on || button.hasAttribute('aria-current');
     }
     sdPanel.classList.toggle('busy', sd.busy);
@@ -368,6 +541,14 @@ function formatSize(bytes) {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB`;
 }
 const joinPath = (dir, name) => dir === '/' ? `/${name}` : `${dir}/${name}`;
+function icon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'icon'); svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.append(use);
+    return svg;
+}
 async function sdCall(op, args = {}, transfer = []) {
     if (!sd.ready) return Promise.reject(new Error('The SD card is not available right now.'));
     if (frame) {
@@ -416,6 +597,7 @@ async function sdRefresh(path = sd.cwd) {
         sdError(error); return;
     }
     sd.cwd = path; sd.entries = result.entries; sd.free = result.free;
+    $('sd-meter').style.width = `${result.total ? 100 * (1 - result.free / result.total) : 0}%`;
     sdStatus(`${result.type} · ${formatSize(result.free)} free of ${formatSize(result.total)}` +
         (frame ? ' · changes reset the device' : ''));
     sdRender();
@@ -442,39 +624,42 @@ function sdRender() {
     for (const entry of sd.entries) {
         const row = document.createElement('tr');
         row.dataset.name = entry.name;
+        if (entry.mtime) row.title = `Modified ${entry.mtime.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'})}`;
         const name = document.createElement('td');
         name.className = 'name';
+        const label = document.createElement('span');
+        label.textContent = entry.name;
         if (entry.isDir) {
             const open = document.createElement('button');
-            open.className = 'dir'; open.textContent = entry.name; open.dataset.action = 'open';
+            open.className = 'dir entry'; open.dataset.action = 'open'; open.type = 'button';
+            open.append(icon('folder'), label);
             name.append(open);
         } else {
-            const span = document.createElement('span');
-            span.className = 'file'; span.textContent = entry.name;
-            name.append(span);
+            const file = document.createElement('div');
+            file.className = 'entry';
+            file.append(icon('file'), label);
+            name.append(file);
         }
         const size = document.createElement('td');
         size.className = 'size'; size.textContent = entry.isDir ? '' : formatSize(entry.size);
-        const date = document.createElement('td');
-        date.className = 'date';
-        date.textContent = entry.mtime ? entry.mtime.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'}) : '';
         const actions = document.createElement('td');
         actions.className = 'ops';
-        for (const [action, label] of [['download', 'Download'], ['rename', 'Rename'], ['remove', 'Delete']]) {
+        for (const [action, text, symbol] of [['download', 'Download', 'download'], ['rename', 'Rename', 'pencil'], ['remove', 'Delete', 'trash']]) {
             if (action === 'download' && entry.isDir) continue;
             const button = document.createElement('button');
-            button.textContent = label; button.dataset.action = action;
-            button.setAttribute('aria-label', `${label} ${entry.name}`);
+            button.type = 'button'; button.dataset.action = action; button.title = text;
+            button.setAttribute('aria-label', `${text} ${entry.name}`);
+            button.append(icon(symbol));
             actions.append(button);
         }
-        row.append(name, size, date, actions);
+        row.append(name, size, actions);
         rows.append(row);
     }
     if (!sd.entries.length) {
         const row = document.createElement('tr');
         row.className = 'empty';
         const cell = document.createElement('td');
-        cell.colSpan = 4; cell.textContent = 'Empty folder';
+        cell.colSpan = 3; cell.textContent = 'Empty folder';
         row.append(cell); rows.append(row);
     }
     sdSetEnabled(true);

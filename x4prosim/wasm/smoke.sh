@@ -10,6 +10,7 @@
 # default blank card. INPUT_SD defaults to the supplied source SD for smoke.mjs.
 # The legacy X3 browser check requires a card that causes guest writes; set
 # PICKER_SD and INPUT_SD to that fixture (the explorer ignores PICKER_SD).
+# The page defaults to turbo; append ?turbo=0 to WEB_URL for accurate timing.
 # Omit WEB_URL to retain the existing Node/native-only flow (including CI).
 # Images are copied; logs, PPM screenshots and measurements remain in evidence/.
 set -euo pipefail

@@ -47,10 +47,10 @@ Chrome 155 and Node 26 are verified; Firefox/Safari emulator runs are untested.
 Threads require cross-origin isolation, provided by the local server or the
 bundled service worker on HTTPS hosting.
 
-Accurate timing is the default in the browser and Node launcher. The
-**Turbo (fast, not timing-accurate)** checkbox starts unticked; `?turbo=1` or
-`TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img` opts in. `?turbo=0` and
-`TURBO=0` remain accepted.
+The browser page defaults to **Turbo (fast, not timing-accurate)**: the
+checkbox starts ticked, and unticking it or `?turbo=0` selects accurate timing
+(`?turbo=1` remains accepted). The Node launcher keeps accurate timing by
+default; `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img` opts in.
 
 The 2026-10-10 stack combines inline Emscripten file I/O with amortized BQL
 locking, lock-free GPSPI CMD reads with single-access dispatch, and direct

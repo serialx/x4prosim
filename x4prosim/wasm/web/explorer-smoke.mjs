@@ -4,7 +4,8 @@
  * copied into EVIDENCE_DIR; the test always starts with the packaged blank card.
  * CDP_PORT, EVIDENCE_DIR and TIMEOUT (seconds, default 180) follow smoke.mjs.
  * node explorer-smoke.mjs http://127.0.0.1:8000/  (no flash/sd query)
- * Requires mcopy, mdir and fsck.fat on PATH. ?turbo=1 is for iteration only.
+ * Requires mcopy, mdir and fsck.fat on PATH. The page defaults to turbo; add
+ * ?turbo=0 for accurate-timing acceptance.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -42,7 +43,7 @@ const runningFile = path.join(fixtures, runningName);
 assert(![small, demian, flash].includes(runningFile), 'Fixture conflicts with running-upload.epub');
 fs.copyFileSync(small, runningFile);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-const measurements = {url: url.href, turbo: url.searchParams.get('turbo') === '1', states: {}, boots: {}, dialogs: []};
+const measurements = {url: url.href, turbo: url.searchParams.get('turbo') !== '0', states: {}, boots: {}, dialogs: []};
 const started = Date.now(), deadline = started + Number(process.env.TIMEOUT || 180) * 1000;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const pages = await (await fetch(`http://127.0.0.1:${process.env.CDP_PORT || 9224}/json`)).json();
@@ -193,7 +194,6 @@ async function freshPage() {
     errors.length = 0;
     await waitFor('crossOriginIsolated && document.querySelector("#sd-refresh") && !document.querySelector("#sd-refresh").disabled');
     assert.equal(await evaluate('!!document.querySelector("iframe")'), false, 'Picker page must not auto-start');
-    await picker('#flash', [flash]);
     assert.equal(await evaluate('document.querySelector("#turbo").checked'), measurements.turbo);
 }
 try {
@@ -217,7 +217,8 @@ try {
     await freshPage();
     await picker('#sd', [path.resolve(process.env.INPUT_SD || 'build-wasm-32limit/web-dist/blank-sd.img')]);
     await listing('baseline-blank', []);
-    await boot('baseline', () => click('#start'));
+    // Choosing the firmware starts the emulator.
+    await boot('baseline', () => picker('#flash', [flash]));
     const blank = await openBrowser('device-blank-browser');
     await stop();
 
@@ -247,7 +248,7 @@ try {
     await freshPage();
     await listing('state1-restored', [renamed, folder]);
 
-    await boot('state2', () => click('#start'));
+    await boot('state2', () => picker('#flash', [flash]));
     await click('#sd-refresh');
     await listing('state2', [renamed, folder]);
     const populated = await openBrowser('device-populated-browser');
@@ -313,7 +314,7 @@ try {
     await screenshot('explorer-state3', '.sd');
     await freshPage();
     await listing('state3-restored', [renamed, folder]);
-    await boot('restarted', () => click('#start'));
+    await boot('restarted', () => picker('#flash', [flash]));
     await click('#sd-refresh');
     await listing('restarted', [renamed, folder]);
     await screenshot('explorer-restarted', '.sd');

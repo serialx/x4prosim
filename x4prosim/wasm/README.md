@@ -47,9 +47,10 @@ compatible dependencies. `WASM_JIT_STATS=1` enables Node JIT module counts;
 `RUN_NODE_SLEEP=off` gives deterministic idle timing for comparisons. See the
 full guide before changing the fixed 256 MiB heap or 64 MiB translation cache.
 
-Accurate timing is the default for `run-node.sh` and the browser page (checkbox
-unticked). Opt into turbo with `TURBO=1 x4prosim/wasm/run-node.sh flash.bin sd.img`
-or `?turbo=1`; `TURBO=0` and `?turbo=0` remain accepted. Turbo keeps `-icount`
+The browser page defaults to turbo (checkbox ticked); `?turbo=0` or unticking
+it selects accurate timing, and `?turbo=1` remains accepted. `run-node.sh` keeps
+accurate timing by default; opt in with `TURBO=1 x4prosim/wasm/run-node.sh
+flash.bin sd.img` (`TURBO=0` remains accepted). Turbo keeps `-icount`
 with `sleep=off`, minimizes device delays and uses synchronous GPSPI transfers.
 It also reduces Wi-Fi RX frame spacing from 5 ms to 0.5 ms, leaving time for
 the guest to service receive interrupts. Accurate mode keeps the 5 ms default.
@@ -100,7 +101,7 @@ x4prosim/wasm/build.sh --web
 python3 x4prosim/wasm/serve.py build-wasm-32limit/web-dist
 ```
 
-Leave **Enable Wi-Fi downloads** checked, start an official CrossPoint 1.6.5
+Leave the **Wi-Fi** switch on, start an official CrossPoint 1.6.5
 image, and open **Settings > Reader > Manage Fonts**. Join the open
 **PICSimLabWifi** network. Installed fonts are saved with the SD card in this
 browser. Use **Download SD image** to export a copy.
