@@ -2,6 +2,7 @@
 'use strict';
 let input = [];
 let monitor = false;
+let machineType, homeHeld = false;
 // Actions that need the VM stopped (snapshots, SD card operations), FIFO.
 // Each one runs on the 'VM status: paused' line of its own 'info status'.
 const pauses = [];
@@ -13,7 +14,22 @@ const canvas = document.querySelector('canvas');
 window.addEventListener('beforeunload', event => event.stopImmediatePropagation(), {capture: true});
 const send = (type, extra = {}) => parent.postMessage({type, ...extra}, location.origin);
 const keyCodes = {ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
-    Enter: 13, Backspace: 8, Escape: 27, KeyP: 80};
+    Enter: 13, Backspace: 8, Escape: 27, KeyP: 80, Home: 36};
+// Home is a capacitive key on the GT911, separate from the GPIO buttons.
+// Handle both forwarded page controls and keys typed with the canvas focused.
+function homeKey(down) {
+    if (machineType !== 'x4pro' || !window.Module?.FS || homeHeld === down) return;
+    homeHeld = down;
+    command(`qom-set /machine/gt911 home ${down}`);
+}
+for (const type of ['keydown', 'keyup']) document.addEventListener(type, event => {
+    if (machineType !== 'x4pro' || event.code !== 'Home' ||
+        event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    homeKey(type === 'keydown');
+}, {capture: true});
+window.addEventListener('blur', () => homeKey(false));
 // Keep these overrides in sync with x4prosim/turbo-args.sh.
 function turboProperties(machine) {
     const properties = [
@@ -114,6 +130,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
             keyCode: keyCodes[data.code], which: keyCodes[data.code], bubbles: true
         }));
     } else if (data.type === 'reset') {
+        homeKey(false);
         window.Module?.browserNetwork?.reset();
         command('system_reset');
     } else if (data.type === 'download' || data.type === 'stop' || data.type === 'autosave') {
@@ -122,6 +139,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
         sdOperation(data);
     } else if (data.type === 'boot') {
         const {machine, flash, sd, rom, wifi = true, turbo = false} = data;
+        machineType = machine;
         // Keep the default pacing; allow deterministic benchmark runs to opt out.
         const sleep = turbo || new URLSearchParams(parent.location.search).get('sleep') === 'off' ? 'off' : 'on';
         let browserNetwork = null;

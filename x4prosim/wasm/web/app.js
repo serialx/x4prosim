@@ -12,7 +12,7 @@ let sdSaving = 0, sdSnapshotPending = false;
 let milestones = 0, startedAt;
 const held = new Set();
 const bindings = {Back: 'Backspace', Confirm: 'Enter', Left: 'ArrowLeft',
-    Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Power: 'KeyP'};
+    Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Power: 'KeyP', Home: 'Home'};
 const post = (data, transfer = []) => frame?.contentWindow.postMessage(data, location.origin, transfer);
 const status = text => { $('status').textContent = text; };
 const timingLabel = () => $('turbo').checked ? 'Turbo (not timing-accurate)' : 'Accurate timing';
@@ -76,7 +76,7 @@ for (const type of ['keydown', 'keyup']) document.addEventListener(type, event =
 window.addEventListener('blur', release);
 function buttons(machine) {
     $('keys').replaceChildren();
-    for (const name of machine === 'x3' ? Object.keys(bindings) : ['Up', 'Down', 'Power']) {
+    for (const name of machine === 'x3' ? Object.keys(bindings).filter(name => name !== 'Home') : ['Home', 'Up', 'Down', 'Power']) {
         const button = document.createElement('button');
         button.textContent = name;
         button.addEventListener('pointerdown', event => {

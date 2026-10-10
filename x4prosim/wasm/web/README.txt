@@ -64,7 +64,8 @@ device section scrolls horizontally. Avoid percentage sizing on the canvas:
 SDL adopts that size and resamples the framebuffer, producing moire in dithering.
 
 Use the on-screen controls or arrows, Enter, Backspace/Esc, and P. X4 Pro also
-accepts pointer/touch input on its canvas. Reset resets the machine. Stop pauses
+has a Home control (keyboard: Home) and accepts pointer/touch input on its canvas.
+Reset resets the machine. Stop pauses
 the guest, copies the current SD image, and removes the iframe and its workers.
 Start then boots again with that SD image. Download SD image pauses the guest,
 copies the card, and resumes execution. The SD card is saved in this browser
@@ -153,7 +154,9 @@ WEB_MACHINE=x4pro detects an ESP32-S3 firmware header (chip ID 9 at the
 bootloader or app offset) and waits for the third 8179_DRF refresh plus the
 following [MEM] checkpoint. It saves web-x4pro-home.png and web-x4pro.ppm,
 checks Down and keyboard Up change the panel, and taps the Library row on the
-blank-card Home screen. The touch capture is web-x4pro.png; Stop must remove
+blank-card Home screen. It then checks that the Home control and keyboard Home
+(with page or canvas focus) return to the same Home screen. The touch capture
+is web-x4pro.png; the return capture is web-x4pro-home-control.png. Stop must remove
 the runtime. Other firmware needs equivalent CrossPoint log milestones.
 A blank 16 MiB flash still tests only ROM boot and pointer delivery.
 Both device tests also require native canvas and iframe dimensions at pixel

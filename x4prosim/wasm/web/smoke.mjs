@@ -296,6 +296,13 @@ smoke: try {
         }
         measurements.display_sizes = await checkDisplaySizes(480, 800);
         const beforeTouch = await evaluate(`${canvas}.toDataURL()`);
+        // Returning Home keeps Library selected. Compare the header and book
+        // area, excluding the menu selection that legitimately changes.
+        const homeRegion = `(() => {
+            const c = document.createElement('canvas'); c.width = 480; c.height = 300;
+            c.getContext('2d').drawImage(${canvas}, 0, 0); return c.toDataURL();
+        })()`;
+        const homePixels = await evaluate(homeRegion);
         const logBeforeTouch = await evaluate(consoleText);
         const point = await evaluate(`(() => {
             const frame = document.querySelector('iframe');
@@ -318,6 +325,33 @@ smoke: try {
         }
         measurements.pointer_delivered_without_error = true;
         await screenshot('web-x4pro.png');
+        if (measurements.firmware) {
+            for (const method of ['button', 'page-keyboard', 'canvas-keyboard']) {
+                if (method === 'button') {
+                    await evaluate(`Array.from(document.querySelectorAll('#keys button')).find(b => b.textContent === 'Home').click()`);
+                } else {
+                    await evaluate(method === 'canvas-keyboard' ? `${canvas}.focus({preventScroll:true})` :
+                        `document.querySelector('#console').focus({preventScroll:true})`);
+                    await call('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Home', code: 'Home', windowsVirtualKeyCode: 36});
+                    await delay(measurements.turbo ? 40 : 150);
+                    await call('Input.dispatchKeyEvent', {type: 'keyUp', key: 'Home', code: 'Home', windowsVirtualKeyCode: 36});
+                }
+                await waitFor(`${homeRegion} === ${JSON.stringify(homePixels)}`);
+                measurements[`${method.replaceAll('-', '_')}_home_returned_home`] = true;
+                if (method !== 'canvas-keyboard') {
+                    const beforeLibrary = await evaluate(`${canvas}.toDataURL()`);
+                    await call('Input.dispatchMouseEvent', {type: 'mousePressed', button: 'left', clickCount: 1, ...point});
+                    await delay(measurements.turbo ? 40 : 150);
+                    await call('Input.dispatchMouseEvent', {type: 'mouseReleased', button: 'left', clickCount: 1, ...point});
+                    await waitFor(`${canvas}.toDataURL() !== ${JSON.stringify(beforeLibrary)}`);
+                    await delay(1500);
+                    if (await evaluate(`${homeRegion} === ${JSON.stringify(homePixels)}`)) {
+                        throw new Error('Touch did not reopen Library before testing Home');
+                    }
+                }
+            }
+            await screenshot('web-x4pro-home-control.png');
+        }
     } else {
         measurements.home_milestone_s = await waitFor('window.bootTimeSeconds');
         measurements.page_load_to_home_s = ((await waitFor('window.smokeHomeEpoch')) - start) / 1000;
