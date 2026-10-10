@@ -1,0 +1,119 @@
+CrossPoint official release integration — 2026-10-10
+
+PASS: all required acceptance checks (a)-(e) and quiet timing check (f).
+
+Merge: 623653c290, non-fast-forward merge of serialx/exp-f-x4pro into
+serialx/wasm-jit (parents fb2c800cd0 and be072c2da9).
+Git merged the files without conflicts. Review confirmed preservation of both
+browser release composition/picker/URL/hash checks and X4 Pro firmware Home,
+settled startup, Down/Up, real SDL/GT911 Library touch and Stop assertions.
+
+Integrated fixes:
+1789bf86db — reload env and stack at every shared Wasm TB entry for SMP guests.
+7034b4e805 — round UC8179 animation deadlines up, always beyond current time.
+a6bc3020ae — use SDL logical coordinates without scaling pointer input twice.
+be072c2da9 — firmware-driven X4 Pro Node/browser smoke and status detection.
+
+Documentation: both release asset names remain documented; the X4 Pro browser
+example now selects the official app directly; stale ROM-only status was
+removed from wasm/README.md. What to upstream lists all three fixes.
+The existing X3 measurements tables were not changed.
+
+Builds:
+ninja -C build qemu-system-riscv32 qemu-system-xtensa: PASS.
+x4prosim/wasm/build.sh --web: PASS with default WASM64_MODE=32 / MEMORY64=2.
+Initial sandbox configure failed to download Python dependencies; retry with
+network access succeeded. Logs: integration3/native-build.log,
+integration3/wasm-build.log (failed attempt), integration3/wasm-build-retry.log.
+Both emulators relinked and package-web.sh regenerated the browser package.
+Only existing WASM_BIGINT deprecation warnings were emitted by emcc.
+
+Wasm SHA256 after build:
+riscv32 1e00a6a1cc2f2ce427507045057f1aad93814413314fd38e6d87483f44a64c4d
+xtensa  03c90ae57cfe3d30a50cd495d44b88313ccb897b86ffd2862b9b303753079bd5
+
+(a) Unit tests:
+python3 -m unittest discover -s x4prosim/tests -v
+PASS: 7 tests, 1 optional skip without a supplied release app.
+Repeated with CROSSPOINT_RELEASE_APP set to the official X3 asset: all 7 PASS.
+Logs: integration3/unittest.log and unittest-with-release.log.
+
+Official source directory used below as <official>:
+/private/tmp/claude-501/-Users-serialx-orca-workspaces-x4prosim-wasm/006336e6-0476-434a-b4fa-3c6fbee22806/scratchpad/official/
+All commands run at the repository root. No firmware source/app bytes changed.
+No firmware/composed image staged or committed; no push.
+
+(b)-(d) Node and native panel checks:
+Exact commands are saved in integration3/node-checks.sh. Native reference:
+NATIVE_QEMU="$PWD/build" EVIDENCE_DIR="$PWD/build-wasm/evidence/integration3/native-x3" x4prosim/wasm/smoke.sh build-wasm-32limit/web-dist/flash.bin build-wasm-32limit/web-dist/sd.img
+PASS. X3 Node used REFERENCE_PPM pointing at that fresh native x3.ppm.
+
+X4 Pro composition:
+python3 x4prosim/mkflash.py <official>/crosspoint-1.6.5-x4pro.bin build-wasm/evidence/x4pro-official.bin
+SHA256 1f418cec5fdd01929562c5091386236a22547fbe485c4555ec79f919e960e76c.
+Accurate X4 Pro smoke ran with TURBO=0 and the packaged blank 64 MiB SD.
+Default X4 Pro smoke used --turbo plus RUN_NODE=integration3/run-node-default.sh,
+which unsets TURBO before exec run-node.sh, proving the launcher's default.
+The native turbo reference is generated automatically by smoke.sh.
+
+rom/x4pro: PASS; milestone 0.262 s, settled 2.262 s, JIT TBs 254.
+node-x3/x3: PASS; milestone 5.034 s, settled 18.610 s, JIT TBs 1488.
+node-x3/x4pro: PASS; milestone 0.269 s, settled 2.270 s, JIT TBs 254.
+node-x4pro-accurate/x4pro: PASS; milestone 7.791 s, settled 16.702 s, JIT TBs 1142.
+node-x4pro-default/x4pro: PASS; milestone 2.772 s, settled 5.446 s, JIT TBs 1079.
+X3 native/Node panel byte equality: PASS; SHA256 b95efa19c1fa99c2abd97fb32ed1a729ecb25a17147198857067ac25523a4c5c.
+X4 Pro turbo native/Node panel byte equality: PASS; SHA256 65b6c7acf15c1d734ae5e6a2bc5a1740af1cefdc9d3c3af34db648a3bfb2699f.
+
+(e) Browser acceptance:
+python3 x4prosim/wasm/serve.py build-wasm-32limit/web-dist
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=9224 --user-data-dir=/tmp/x4prosim-chrome-integration3 --no-first-run about:blank
+Chrome 155.0.8059.39, GPU enabled, Metal WebGL on Apple M5 Max.
+Default turbo, MEMORY64=2. No firmware copies added to web-dist: picker uses
+the official files in their original directory, URL uses pre-existing flash.bin.
+
+PICKER_FLASH=<official>/crosspoint-1.6.5-x3-x4.bin PICKER_SD="$PWD/build-wasm-32limit/web-dist/sd.img" INPUT_SD="$PWD/build-wasm-32limit/web-dist/sd.img" EVIDENCE_DIR=build-wasm/evidence/integration3/browser-x3-picker node x4prosim/wasm/web/smoke.mjs http://127.0.0.1:8000/
+INPUT_SD="$PWD/build-wasm-32limit/web-dist/sd.img" EVIDENCE_DIR=build-wasm/evidence/integration3/browser-x3-full node x4prosim/wasm/web/smoke.mjs 'http://127.0.0.1:8000/?flash=flash.bin&sd=sd.img'
+WEB_MACHINE=x4pro PICKER_FLASH=<official>/crosspoint-1.6.5-x4pro.bin REFERENCE_PPM="$PWD/build-wasm/evidence/integration3/node-x4pro-default/native-turbo/x4pro.ppm" EVIDENCE_DIR=build-wasm/evidence/integration3/browser-x4pro-picker node x4prosim/wasm/web/smoke.mjs http://127.0.0.1:8000/
+
+browser-x3-picker: PASS; Home 1.477 s; settled 6.239 s.
+  Composition status observed; browser SHA256 = Python SHA256 = 80b8d1de62ff9ade1bf5770177e23283677ce13427b724a3e7091409fab8b12a.
+  down_changed_canvas: PASS.
+  keyboard_up_changed_canvas: PASS.
+  sd_writes_preserved: PASS.
+  reset_booted_rom: PASS.
+  stop_removed_runtime: PASS.
+browser-x3-full: PASS; Home 1.525 s; settled 5.489 s.
+  down_changed_canvas: PASS.
+  keyboard_up_changed_canvas: PASS.
+  sd_writes_preserved: PASS.
+  reset_booted_rom: PASS.
+  stop_removed_runtime: PASS.
+browser-x4pro-picker: PASS; Home 2.622 s; settled 4.975 s.
+  Composition status observed; browser SHA256 = Python SHA256 = 1f418cec5fdd01929562c5091386236a22547fbe485c4555ec79f919e960e76c.
+  down_changed_canvas: PASS.
+  keyboard_up_changed_canvas: PASS.
+  touch_opened_library: PASS.
+  stop_removed_runtime: PASS.
+X4 Pro Home PPM matches native byte for byte (REFERENCE_PPM assertion).
+Visually inspected browser-x4pro-picker/web-x4pro.png: Library screen with
+no books, reached by real CDP pointer events through SDL/GT911 (no QOM tap).
+The X4 Pro run used the packaged blank 64 MiB card; the X3 runs used the existing
+1 GiB book/settings card and validated guest writes via SD download hashes.
+
+(f) Quiet X3 timing:
+Stopped the owned serve.py PID 73352 and isolated Chrome PID 73437, and waited
+for both process sessions to exit. No build or other emulator run was active.
+Ran integration3/quiet-timing.sh: three sequential copies of the original
+flash/SD through smoke.sh with TURBO=0 RUN_NODE_SLEEP=off. Every run passed
+Home, settled startup, JIT compilation, panel capture and the X4 Pro ROM check.
+Home seconds: 2.483496, 2.491200, 2.486103.
+Median: 2.486103 s, within the requested 2.4–2.6 s baseline; no material regression observed.
+These three runs are an acceptance timing check, not a statistical guarantee.
+Evidence: integration3/x3-timing-{1,2,3}/measurements.json, logs and PPMs.
+
+Final result: all acceptance steps (a)-(e) PASS, and timing check (f) PASS.
+Server and Chrome stopped; all smoke emulator processes exited. No temporary
+firmware copies were added to web-dist; its pre-existing flash.bin and sd.img
+remain intact. No firmware was changed or committed. No push was performed.
+Memory64=1 and non-Chrome browsers were not retested. S3 deep-sleep wake remains
+an existing limitation; blank-card Library acceptance does not test book reading.
