@@ -142,6 +142,11 @@ static uint64_t esp32s3_cache_read(void *opaque, hwaddr addr, unsigned int size)
             r = s->icache_enable;
             break;
         /* For the following registers, mark the bit as done only if the feature was enabled */
+        case A_EXTMEM_DCACHE_OCCUPY_CTRL:
+            r = check_and_reset_ena(&s->regs[index],
+                                    R_EXTMEM_DCACHE_OCCUPY_CTRL_OCCUPY_ENA_MASK,
+                                    R_EXTMEM_DCACHE_OCCUPY_CTRL_OCCUPY_DONE_MASK);
+            break;
         case A_EXTMEM_DCACHE_SYNC_CTRL:
             s->regs[index] |= 1<<3;
             r = check_and_reset_ena(&s->regs[index],
@@ -272,6 +277,8 @@ static void esp32s3_cache_reset_hold(Object *obj, ResetType type)
 {
     ESP32S3CacheState *s = ESP32S3_CACHE(obj);
     memset(s->regs, 0, ESP32S3_CACHE_REG_COUNT * sizeof(*s->regs));
+    s->regs[ESP32S3_CACHE_REG_IDX(A_EXTMEM_DCACHE_OCCUPY_CTRL)] =
+        R_EXTMEM_DCACHE_OCCUPY_CTRL_OCCUPY_DONE_MASK;
 
     /* Initialize the MMU with invalid entries */
     for (int i = 0; i < ESP32S3_MMU_TABLE_ENTRY_COUNT; i++) {

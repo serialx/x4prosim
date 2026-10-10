@@ -802,7 +802,7 @@ static void esp32s3_machine_init(MachineState *machine)
 
     /* GDMA Realization */
     {
-        object_property_set_link(OBJECT(&ss->gdma), "soc_mr", OBJECT(dram), &error_abort);
+        object_property_set_link(OBJECT(&ss->gdma), "soc_mr", OBJECT(sys_mem), &error_abort);
         sysbus_realize(SYS_BUS_DEVICE(&ss->gdma), &error_fatal);
         MemoryRegion *mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(&ss->gdma), 0);
         memory_region_add_subregion_overlap(sys_mem, DR_REG_GDMA_BASE, mr, 0);
@@ -991,6 +991,8 @@ static void esp32s3_machine_init(MachineState *machine)
     {
         DeviceState *spi2 = qdev_new("ssi.esp32s3.gpspi");
         object_property_add_child(OBJECT(ss), "spi2", OBJECT(spi2));
+        object_property_set_link(OBJECT(spi2), "gdma", OBJECT(&ss->gdma),
+                                 &error_abort);
         sysbus_realize_and_unref(SYS_BUS_DEVICE(spi2), &error_fatal);
         memory_region_add_subregion_overlap(sys_mem, DR_REG_SPI2_BASE,
                                             sysbus_mmio_get_region(SYS_BUS_DEVICE(spi2), 0), 1);

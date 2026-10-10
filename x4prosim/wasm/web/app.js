@@ -136,6 +136,9 @@ function append(line) {
         renderConsole();
     } else if (consoleMatches(line)) view.append(line + '\n');
     if (follow) view.scrollTop = view.scrollHeight;
+    if (/main_task: Returned from app_main\(\)/.test(line) && !window.bootTimeSeconds) {
+        status(`${frame?.title.startsWith('X4 Pro') ? 'X4 Pro' : 'X3'} · ${timingLabel()} · Firmware running`);
+    }
     if (/Wait complete:\s+(?:8179|8279|X3)_DRF/.test(line) && ++milestones === 3) {
         const seconds = (performance.now() - startedAt) / 1000;
         status(`${/8179_DRF/.test(line) ? 'X4 Pro' : 'X3'} · ${timingLabel()} · Home drawn in ${seconds.toFixed(2)} s · finishing startup…`);

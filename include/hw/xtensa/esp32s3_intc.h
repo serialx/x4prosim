@@ -141,6 +141,7 @@ typedef struct Esp32s3IntMatrixState {
     MemoryRegion iomem;
     qemu_irq *outputs[ESP32S3_CPU_COUNT];
     uint8_t irq_map[ESP32S3_CPU_COUNT][ESP32S3_INT_MATRIX_INPUTS];
+    bool irq_level[ESP32S3_INT_MATRIX_INPUTS];
 
     /* properties */
     XtensaCPU *cpu[ESP32S3_CPU_COUNT];

@@ -11,8 +11,10 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/module.h"
+#include "qemu/timer.h"
 #include "hw/core/sysbus.h"
 #include "hw/core/irq.h"
+#include "hw/core/qdev-properties.h"
 #include "ui/input.h"
 
 #define TYPE_X4PRO_KEYS "x4pro-keys"
@@ -24,13 +26,24 @@ struct X4ProKeysState {
     SysBusDevice parent_obj;
     QemuInputHandlerState *input;
     qemu_irq out[KEY_COUNT];    /* pin level: 1 released, 0 pressed */
+    QEMUTimer boot_timer;
+    uint32_t power_boot_ms;
+    bool boot_hold;
     bool pressed[KEY_COUNT];
 };
+
+static void keys_update(X4ProKeysState *s)
+{
+    for (int k = 0; k < KEY_COUNT; k++) {
+        bool down = s->pressed[k] || (k == KEY_POWER && s->boot_hold);
+        qemu_set_irq(s->out[k], !down);
+    }
+}
 
 static void keys_set(X4ProKeysState *s, int k, bool down)
 {
     s->pressed[k] = down;
-    qemu_set_irq(s->out[k], !down);
+    keys_update(s);
 }
 
 static void keys_event(DeviceState *dev, QemuConsole *src, QemuInputEvent *evt)
@@ -59,9 +72,32 @@ KEY_PROP(up, KEY_UP)
 KEY_PROP(down, KEY_DOWN)
 KEY_PROP(power, KEY_POWER)
 
+static void keys_boot_release(void *opaque)
+{
+    X4ProKeysState *s = opaque;
+
+    s->boot_hold = false;
+    keys_update(s);
+}
+
+static void keys_reset_hold(Object *obj, ResetType type)
+{
+    X4ProKeysState *s = X4PRO_KEYS(obj);
+
+    timer_del(&s->boot_timer);
+    s->boot_hold = s->power_boot_ms > 0;
+    if (s->boot_hold) {
+        timer_mod(&s->boot_timer,
+                  qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + s->power_boot_ms);
+    }
+    keys_update(s);
+}
+
 static void keys_realize(DeviceState *dev, Error **errp)
 {
     X4ProKeysState *s = X4PRO_KEYS(dev);
+
+    timer_init_ms(&s->boot_timer, QEMU_CLOCK_VIRTUAL, keys_boot_release, s);
     s->input = qemu_input_handler_register(dev, &keys_handler);
     for (int k = 0; k < KEY_COUNT; k++) {
         keys_set(s, k, false);
@@ -73,6 +109,7 @@ static void keys_unrealize(DeviceState *dev)
     X4ProKeysState *s = X4PRO_KEYS(dev);
 
     qemu_input_handler_unregister(s->input);
+    timer_del(&s->boot_timer);
 }
 
 static void keys_init(Object *obj)
@@ -84,12 +121,19 @@ static void keys_init(Object *obj)
     object_property_add_bool(obj, "power", get_power, set_power);
 }
 
+static const Property keys_properties[] = {
+    DEFINE_PROP_UINT32("power-boot-ms", X4ProKeysState, power_boot_ms, 1500),
+};
+
 static void keys_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
     dc->realize = keys_realize;
     dc->unrealize = keys_unrealize;
+    rc->phases.hold = keys_reset_hold;
+    device_class_set_props(dc, keys_properties);
 }
 
 static const TypeInfo keys_info = {

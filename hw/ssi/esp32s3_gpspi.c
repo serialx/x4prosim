@@ -1,5 +1,5 @@
 /*
- * ESP32-S3 general-purpose SPI master (SPI2/SPI3), CPU-driven mode only.
+ * ESP32-S3 general-purpose SPI master (SPI2/SPI3), PIO and GDMA transfers.
  *
  * Setting CMD.USR shifts MS_DLEN+1 bits out of W0..W15 (byte 0 = W0 bits 7:0)
  * onto the SSI bus at the end of its SPI_CLOCK wire time, stores what comes
@@ -8,7 +8,7 @@
  * longer than one byte also add buffer-overhead-ns for the buffered PIO path.
  * These effective setup costs default to zero; boards can calibrate them with
  * the guest driver's existing instruction time included in the measurement.
- * CMD.UPDATE self-clears. DMA, address/command/dummy phases and
+ * CMD.UPDATE self-clears. Address/command/dummy phases and
  * hardware CS are not modeled: the X4 Pro drives CS and DC from GPIO.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 #include "hw/core/sysbus.h"
 #include "hw/core/irq.h"
 #include "hw/ssi/ssi.h"
+#include "hw/dma/esp_gdma.h"
 #include "trace.h"
 
 #define TYPE_ESP32S3_GPSPI "ssi.esp32s3.gpspi"
@@ -32,6 +33,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Esp32s3GpspiState, ESP32S3_GPSPI)
 #define R_CMD           0x00
 #define R_CLOCK         0x0C
 #define R_MS_DLEN       0x1C
+#define R_DMA_CONF      0x30
 #define R_DMA_INT_ENA   0x34
 #define R_DMA_INT_CLR   0x38
 #define R_DMA_INT_RAW   0x3C
@@ -45,12 +47,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(Esp32s3GpspiState, ESP32S3_GPSPI)
 #define CMD_UPDATE      BIT(23)
 #define CMD_USR         BIT(24)
 #define INT_TRANS_DONE  BIT(12)
+#define DMA_TX_ENA      BIT(28)
+#define DMA_RX_ENA      BIT(27)
+#define MAX_TRANSFER_BYTES (1 << 15)
 
 struct Esp32s3GpspiState {
     SysBusDevice parent_obj;
     MemoryRegion iomem;
     qemu_irq irq;
     SSIBus *bus;
+    ESPGdmaState *gdma;
     uint32_t regs[REGS_SIZE / 4];
     uint32_t int_raw;
     uint32_t int_ena;
@@ -60,7 +66,7 @@ struct Esp32s3GpspiState {
     uint32_t buffer_overhead_ns;
     bool zero_wire_time;
     uint32_t transfer_bytes;
-    uint8_t transfer_buf[64];
+    uint8_t transfer_buf[MAX_TRANSFER_BYTES];
 };
 
 static void gpspi_update_irq(Esp32s3GpspiState *s)
@@ -72,10 +78,34 @@ static void gpspi_transfer(void *opaque)
 {
     Esp32s3GpspiState *s = opaque;
     uint8_t *buf = (uint8_t *)&s->regs[R_W0 / 4];
+    uint32_t dma_conf = s->regs[R_DMA_CONF / 4];
+    uint32_t chan;
+
+    if (dma_conf & DMA_TX_ENA) {
+        if (!s->gdma ||
+            !esp_gdma_get_channel_periph(s->gdma, GDMA_SPI2,
+                                         ESP_GDMA_OUT_IDX, &chan) ||
+            !esp_gdma_read_channel(s->gdma, chan, s->transfer_buf,
+                                   s->transfer_bytes)) {
+            qemu_log_mask(LOG_GUEST_ERROR, "esp32s3_gpspi: TX DMA failed\n");
+            memset(s->transfer_buf, 0xff, s->transfer_bytes);
+        }
+    }
 
     for (uint32_t i = 0; i < s->transfer_bytes; i++) {
+        s->transfer_buf[i] = ssi_transfer(s->bus, s->transfer_buf[i]);
+    }
+    if (dma_conf & DMA_RX_ENA) {
+        if (!s->gdma ||
+            !esp_gdma_get_channel_periph(s->gdma, GDMA_SPI2,
+                                         ESP_GDMA_IN_IDX, &chan) ||
+            !esp_gdma_write_channel(s->gdma, chan, s->transfer_buf,
+                                    s->transfer_bytes)) {
+            qemu_log_mask(LOG_GUEST_ERROR, "esp32s3_gpspi: RX DMA failed\n");
+        }
+    } else {
         /* W registers hold bytes little-endian; the host is assumed LE too. */
-        buf[i] = ssi_transfer(s->bus, s->transfer_buf[i]);
+        memcpy(buf, s->transfer_buf, MIN(s->transfer_bytes, 64));
     }
     qatomic_and(&s->regs[R_CMD / 4], ~(uint32_t)CMD_USR);
     s->int_raw |= INT_TRANS_DONE;
@@ -87,7 +117,12 @@ static void gpspi_start_transfer(Esp32s3GpspiState *s)
     uint32_t clock = s->regs[R_CLOCK / 4];
     uint32_t divider = (clock & BIT(31)) ? 1 :
         (((clock >> 18) & 0xf) + 1) * (((clock >> 12) & 0x3f) + 1);
-    uint32_t bits = MIN((s->regs[R_MS_DLEN / 4] & 0x3ffff) + 1, 512);
+    bool dma = s->regs[R_DMA_CONF / 4] & (DMA_TX_ENA | DMA_RX_ENA);
+    uint32_t bits = (s->regs[R_MS_DLEN / 4] & 0x3ffff) + 1;
+
+    if (!dma) {
+        bits = MIN(bits, 512);
+    }
     /* clkcnt_h/l set the duty cycle; clkcnt_n sets the complete period. */
     int64_t duration_ns = DIV_ROUND_UP((uint64_t)bits * divider *
                                       NANOSECONDS_PER_SECOND, 80000000) +
@@ -98,7 +133,8 @@ static void gpspi_start_transfer(Esp32s3GpspiState *s)
     if (s->transfer_bytes > 1) {
         duration_ns += s->buffer_overhead_ns;
     }
-    memcpy(s->transfer_buf, &s->regs[R_W0 / 4], s->transfer_bytes);
+    memset(s->transfer_buf, 0, s->transfer_bytes);
+    memcpy(s->transfer_buf, &s->regs[R_W0 / 4], MIN(s->transfer_bytes, 64));
     if (s->zero_wire_time) {
         /* Explicit non-accurate mode: avoid a timer for each SPI transfer. */
         trace_esp32s3_gpspi_transfer(80000000 / divider, s->transfer_bytes, 0);
@@ -175,8 +211,7 @@ static void gpspi_init(Object *obj)
     memory_region_init_io(&s->iomem, obj, &gpspi_ops, s, TYPE_ESP32S3_GPSPI, REGS_SIZE);
     /*
      * Only CMD reads are lock-free; all other accesses take the BQL in
-     * their callbacks. This CPU-driven controller does not initiate DMA,
-     * so it cannot re-enter guest MMIO and needs no device-wide IO guard.
+     * their callbacks. DMA completes from the virtual timer under the BQL.
      */
     memory_region_enable_lockless_io(&s->iomem);
     sysbus_init_mmio(sbd, &s->iomem);
@@ -206,6 +241,8 @@ static void gpspi_reset(DeviceState *dev)
 }
 
 static const Property gpspi_properties[] = {
+    DEFINE_PROP_LINK("gdma", Esp32s3GpspiState, gdma, TYPE_ESP_GDMA,
+                     ESPGdmaState *),
     DEFINE_PROP_UINT32("transaction-overhead-us", Esp32s3GpspiState,
                        transaction_overhead_us, 0),
     DEFINE_PROP_UINT32("transaction-overhead-ns", Esp32s3GpspiState,

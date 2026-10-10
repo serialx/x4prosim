@@ -75,6 +75,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(Uc8179State, UC8179)
 #define LUT_LEN 60              /* 10 groups; the X4 Pro driver writes 7 */
 #define LUT_GROUPS (LUT_LEN / 6)
 #define PSR_REG 0x20
+#define PSR_UD 0x08
+#define PSR_SHL 0x04
 #define CDI_N2OCP 0x08
 #define MAX_FRAMES 8192
 #define SHADES 1024
@@ -377,12 +379,13 @@ static uint32_t uc8179_refresh(Uc8179State *s)
 
     uc8179_run_frames(s, -1);       /* a refresh still playing finishes first */
     uc8179_relax(s, now, now > s->t_refresh);
-    /* The driver streams framebuffer row h-1-i into RAM row i. */
+    /* Apply the controller's gate-scan and source-shift directions. */
     for (int y = 0; y < H; y++) {
-        int r = H - 1 - y;
+        int r = s->psr & PSR_UD ? H - 1 - y : y;
         for (int x = 0; x < W; x++) {
-            int o = (s->ram[PLANE_OLD][r][x / 8] >> (7 - x % 8)) & 1;
-            int nw = (s->ram[PLANE_NEW][r][x / 8] >> (7 - x % 8)) & 1;
+            int c = s->psr & PSR_SHL ? x : W - 1 - x;
+            int o = (s->ram[PLANE_OLD][r][c / 8] >> (7 - c % 8)) & 1;
+            int nw = (s->ram[PLANE_NEW][r][c / 8] >> (7 - c % 8)) & 1;
             s->cls[y][x] = o << 1 | nw;
         }
     }
@@ -480,12 +483,6 @@ static void uc8179_byte(Uc8179State *s, uint8_t v)
     }
 }
 
-static uint32_t uc8179_transfer(SSIPeripheral *dev, uint32_t data)
-{
-    uc8179_byte(UC8179(dev), data);
-    return 0xff;
-}
-
 /* Next bit the controller presents on SDA during a register read. */
 static uint8_t uc8179_read_byte(Uc8179State *s)
 {
@@ -501,6 +498,19 @@ static uint8_t uc8179_read_byte(Uc8179State *s)
 static bool uc8179_reading(Uc8179State *s)
 {
     return s->dc && !s->in_reset && (s->cmd == 0x71 || s->rd);
+}
+
+static uint32_t uc8179_transfer(SSIPeripheral *dev, uint32_t data)
+{
+    Uc8179State *s = UC8179(dev);
+
+    if (uc8179_reading(s)) {
+        uint8_t value = uc8179_read_byte(s);
+        s->pos++;
+        return value;
+    }
+    uc8179_byte(s, data);
+    return 0xff;
 }
 
 static void uc8179_present_bit(Uc8179State *s)

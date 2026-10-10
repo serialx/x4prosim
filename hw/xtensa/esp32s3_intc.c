@@ -25,27 +25,42 @@
 
 #define IRQ_MAP(cpu, input) s->irq_map[cpu][input]
 
+static void esp32s3_intmatrix_update(Esp32s3IntMatrixState *s, int cpu,
+                                    int out_index)
+{
+    if (s->outputs[cpu] == NULL) {
+        return;
+    }
+    for (int i = 0; i < s->cpu[cpu]->env.config->nextint; i++) {
+        if (s->cpu[cpu]->env.config->extint[i] == out_index) {
+            bool level = false;
+
+            for (int n = 0; n < ESP32S3_INT_MATRIX_INPUTS; n++) {
+                if (s->irq_level[n] && IRQ_MAP(cpu, n) == out_index) {
+                    level = true;
+                    break;
+                }
+            }
+            qemu_set_irq(s->outputs[cpu][i], level);
+            break;
+        }
+    }
+}
+
 static void esp32s3_intmatrix_irq_handler(void *opaque, int n, int level)
 {
     Esp32s3IntMatrixState *s = ESP32S3_INTMATRIX(opaque);
-    for (int i = 0; i < ESP32S3_CPU_COUNT; ++i) {
-        if (s->outputs[i] == NULL) {
-            continue;
-        }
-        int out_index = IRQ_MAP(i, n);
-        for (int int_index = 0; int_index < s->cpu[i]->env.config->nextint; ++int_index) {
-            if (s->cpu[i]->env.config->extint[int_index] == out_index) {
-                qemu_set_irq(s->outputs[i][int_index], level);
-                break;
-            }
-        }
+
+    s->irq_level[n] = level != 0;
+    for (int cpu = 0; cpu < ESP32S3_CPU_COUNT; cpu++) {
+        esp32s3_intmatrix_update(s, cpu, IRQ_MAP(cpu, n));
     }
 }
 
 static inline uint8_t* get_map_entry(Esp32s3IntMatrixState* s, hwaddr addr)
 {
     int source_index = addr / sizeof(uint32_t);
-    if (source_index > ESP32S3_INT_MATRIX_INPUTS * ESP32S3_CPU_COUNT) {
+    if (source_index >= ESP32S3_INT_MATRIX_INPUTS * ESP32S3_CPU_COUNT) {
 #if INTC_DEBUG
         info_report("%s: source_index %d out of range", __func__, source_index);
 #endif // INTC_DEBUG
@@ -71,7 +86,13 @@ static void esp32s3_intmatrix_write(void* opaque, hwaddr addr, uint64_t value, u
     Esp32s3IntMatrixState *s = ESP32S3_INTMATRIX(opaque);
     uint8_t* map_entry = get_map_entry(s, addr);
     if (map_entry != NULL) {
+        int cpu = addr / (ESP32S3_INT_MATRIX_INPUTS * sizeof(uint32_t));
+        int old = *map_entry;
+
         *map_entry = value & 0x1f;
+        /* Pending level interrupts follow routing changes immediately. */
+        esp32s3_intmatrix_update(s, cpu, old);
+        esp32s3_intmatrix_update(s, cpu, *map_entry);
     }
 }
 
