@@ -44,10 +44,10 @@
         </button>
       </div>
       <div class="controls" aria-label="Emulator">
-        <label class="file-chip" title="Official CrossPoint release .bin or a 16 MiB flash dump">
-          <input id="flash" class="visually-hidden" type="file" accept=".bin">
+        <label class="file-chip" title="Firmware .bin, X4 Pro .xota update, or a 16 MiB flash dump">
+          <input id="flash" class="visually-hidden" type="file" accept=".bin,.xota">
           <svg class="icon brand-icon"><use href="#i-chip"/></svg>
-          <span class="file-chip-text"><span class="file-chip-label">Firmware</span><span id="flash-name" class="empty">Choose a CrossPoint .bin…</span></span>
+          <span class="file-chip-text"><span class="file-chip-label">Firmware</span><span id="flash-name" class="empty">Choose a .bin or .xota…</span></span>
           <svg class="icon chevron"><use href="#i-chevron"/></svg>
         </label>
         <span class="spacer"></span>
@@ -136,10 +136,11 @@
         <div class="bezel">
           <div id="screen">
             <div class="intro">
-              <h2>Choose a CrossPoint firmware to begin</h2>
+              <h2>Choose firmware to begin</h2>
               <p>Pick <code>crosspoint-&lt;ver&gt;-x3-x4.bin</code> for the X3 or <code>crosspoint-&lt;ver&gt;-x4pro.bin</code>
                 for the X4 Pro from the <a href="https://github.com/crosspoint-reader/crosspoint-reader/releases">CrossPoint releases</a>,
-                or a 16 MiB flash dump. It starts as soon as you choose it.</p>
+                an official X4 Pro <code>.xota</code> update, or a 16 MiB flash dump.
+                It starts as soon as you choose it.</p>
               <label class="button" for="flash"><svg class="icon"><use href="#i-chip"/></svg>Choose firmware…</label>
               <p class="fine">Your SD card is saved in this browser. On your first visit a blank 64 MiB FAT32 card is used.</p>
             </div>
@@ -175,6 +176,7 @@
   <script src="fat.js"></script>
   <script src="sd-ops.js"></script>
   <script src="sd-store.js"></script>
+  <script src="xota.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -244,7 +244,7 @@ async function describeFlash() {
     const machine = {5: 'X3', 9: 'X4 Pro'}[chip];
     if (frame || pending) return;
     // Choosing a firmware starts it; Start reruns the same file after Stop.
-    if (machine) start();
+    if (machine || XOTA.isXota(head) || /\.xota$/i.test(file.name)) start();
     else status('This file is not an ESP32-C3 or ESP32-S3 firmware image.');
 }
 $('flash').addEventListener('change', describeFlash);
@@ -282,12 +282,17 @@ for (const tab of document.querySelectorAll('.tabs [role=tab]')) tab.addEventLis
 });
 
 async function prepareFlash(input) {
-    const bytes = new Uint8Array(input);
+    let bytes = new Uint8Array(input);
+    const xota = XOTA.isXota(bytes);
+    if (xota) {
+        status('Reading and verifying XOTA firmware…');
+        bytes = await XOTA.decode(bytes);
+    }
     if (bytes.length === 0x1000000) {
         return {flash: input, machine: bytes[12] === 5 ? 'x3' : 'x4pro', composed: false};
     }
     if (bytes.length < 24 || bytes[0] !== 0xe9) {
-        throw new Error('Choose an official CrossPoint release .bin or a 16 MiB flash dump (16777216 bytes).');
+        throw new Error('Choose a firmware .bin, an X4 Pro .xota update, or a 16 MiB flash dump (16777216 bytes).');
     }
     const chip = bytes[12] | bytes[13] << 8;
     if (chip !== 5 && chip !== 9) {
@@ -312,6 +317,14 @@ async function prepareFlash(input) {
     flash.set(new Uint8Array(boot), 0);
     flash.set(new Uint8Array(partitions), 0x8000);
     if (nvs) flash.set(new Uint8Array(nvs), 0x9000);
+    if (xota) {
+        // Stock firmware expects ota_0 to be selected and already valid.
+        // ESP-IDF OTA select entry: sequence, erased label, state, sequence CRC.
+        const view = new DataView(flash.buffer);
+        view.setUint32(0xe000, 1, true);
+        view.setUint32(0xe018, 2, true); // ESP_OTA_IMG_VALID
+        view.setUint32(0xe01c, 0x4743989a, true); // CRC32 of LE sequence 1
+    }
     flash.set(bytes, 0x10000);
     return {flash: flash.buffer, machine, composed: true};
 }
@@ -402,7 +415,7 @@ async function start() {
         status('Loading images…');
         const input = $('flash').files[0] ? await $('flash').files[0].arrayBuffer() :
             params.has('flash') ? await fetchImage(params.get('flash')) : null;
-        if (!input) throw new Error('Choose an official CrossPoint release .bin or a 16 MiB flash dump.');
+        if (!input) throw new Error('Choose a firmware .bin, an X4 Pro .xota update, or a 16 MiB flash dump.');
         const {flash, machine, composed} = await prepareFlash(input);
         const composition = composed ? 'Composed 16 MiB flash from release app · ' : '';
         if (composed) { status(composition + 'loading SD image…'); append(composition.trim()); }
