@@ -14,10 +14,11 @@
 /*
  * Resolve an aligned, single-section subpage MMIO access. Otherwise return mr
  * without changing offset. mr must be a subpage region, and the transaction
- * must allow MMIO. The caller holds BQL and an RCU read-side lock.
+ * must allow MMIO. The caller holds an RCU read-side lock. Without BQL,
+ * lockless_only must be true, and only lockless IO regions may be resolved.
  */
 MemoryRegion *memory_region_resolve_subpage(MemoryRegion *mr, hwaddr *offset,
-                                           unsigned size);
+                                           unsigned size, bool lockless_only);
 
 /**
  * physical_memory_map: Map guest physical memory region into host virtual

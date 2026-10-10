@@ -17,6 +17,7 @@
  */
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/main-loop.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
 #include "hw/core/qdev-properties.h"
@@ -76,7 +77,7 @@ static void gpspi_transfer(void *opaque)
         /* W registers hold bytes little-endian; the host is assumed LE too. */
         buf[i] = ssi_transfer(s->bus, s->transfer_buf[i]);
     }
-    s->regs[R_CMD / 4] &= ~CMD_USR;
+    qatomic_and(&s->regs[R_CMD / 4], ~(uint32_t)CMD_USR);
     s->int_raw |= INT_TRANS_DONE;
     gpspi_update_irq(s);
 }
@@ -113,6 +114,13 @@ static void gpspi_start_transfer(Esp32s3GpspiState *s)
 static uint64_t gpspi_read(void *opaque, hwaddr addr, unsigned int size)
 {
     Esp32s3GpspiState *s = opaque;
+
+    /* CMD polling needs only the register value, not the device's BQL. */
+    if (addr == R_CMD) {
+        return qatomic_read(&s->regs[R_CMD / 4]);
+    }
+
+    BQL_LOCK_GUARD();
     switch (addr) {
     case R_DMA_INT_RAW: return s->int_raw;
     case R_DMA_INT_ST:  return s->int_raw & s->int_ena;
@@ -126,16 +134,17 @@ static void gpspi_write(void *opaque, hwaddr addr, uint64_t value, unsigned int 
 {
     Esp32s3GpspiState *s = opaque;
 
+    BQL_LOCK_GUARD();
     switch (addr) {
     case R_CMD:
-        if (s->regs[R_CMD / 4] & CMD_USR) {
+        if (qatomic_read(&s->regs[R_CMD / 4]) & CMD_USR) {
             if (value & CMD_USR) {
                 qemu_log_mask(LOG_GUEST_ERROR,
                               "esp32s3_gpspi: USR while transfer pending\n");
             }
             break;
         }
-        s->regs[R_CMD / 4] = value & ~CMD_UPDATE;
+        qatomic_set(&s->regs[R_CMD / 4], value & ~CMD_UPDATE);
         if (value & CMD_USR) {
             gpspi_start_transfer(s);
         }
@@ -164,6 +173,12 @@ static void gpspi_init(Object *obj)
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
 
     memory_region_init_io(&s->iomem, obj, &gpspi_ops, s, TYPE_ESP32S3_GPSPI, REGS_SIZE);
+    /*
+     * Only CMD reads are lock-free; all other accesses take the BQL in
+     * their callbacks. This CPU-driven controller does not initiate DMA,
+     * so it cannot re-enter guest MMIO and needs no device-wide IO guard.
+     */
+    memory_region_enable_lockless_io(&s->iomem);
     sysbus_init_mmio(sbd, &s->iomem);
     sysbus_init_irq(sbd, &s->irq);
     s->bus = ssi_create_bus(DEVICE(obj), "spi");
@@ -182,7 +197,8 @@ static void gpspi_reset(DeviceState *dev)
     Esp32s3GpspiState *s = ESP32S3_GPSPI(dev);
 
     timer_del(s->transfer_timer);
-    memset(s->regs, 0, sizeof(s->regs));
+    qatomic_set(&s->regs[R_CMD / 4], 0);
+    memset(&s->regs[1], 0, sizeof(s->regs) - sizeof(s->regs[0]));
     s->int_raw = 0;
     s->int_ena = 0;
     s->transfer_bytes = 0;

@@ -513,7 +513,9 @@ static MemTxResult memory_region_write_with_attrs_accessor(MemoryRegion *mr,
     return mr->ops->write_with_attrs(mr->opaque, addr, tmp, size, attrs);
 }
 
-static MemTxResult access_with_adjusted_size(hwaddr addr,
+/* Keep each constant accessor visible to the compiler at its call site. */
+static inline QEMU_ALWAYS_INLINE
+MemTxResult access_with_adjusted_size(hwaddr addr,
                                       uint64_t *value,
                                       unsigned size,
                                       unsigned access_size_min,
@@ -558,7 +560,10 @@ static MemTxResult access_with_adjusted_size(hwaddr addr,
     /* FIXME: support unaligned access? */
     access_size = MAX(MIN(size, access_size_max), access_size_min);
     access_mask = MAKE_64BIT_MASK(0, access_size * 8);
-    if (devend_big_endian(mr->ops->endianness)) {
+    if (size == access_size) {
+        /* A single access needs no splitting or endian-dependent shifts. */
+        r = access_fn(mr, addr, value, access_size, 0, access_mask, attrs);
+    } else if (devend_big_endian(mr->ops->endianness)) {
         for (i = 0; i < size; i += access_size) {
             r |= access_fn(mr, addr + i, value, access_size,
                         (size - access_size - i) * 8, access_mask, attrs);

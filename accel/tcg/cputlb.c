@@ -1977,9 +1977,14 @@ static uint64_t do_ld_mmio_beN(CPUState *cpu, CPUTLBEntryFull *full,
     section = io_prepare(&mr_offset, cpu, full, addr, ra);
     mr = section->mr;
 
-    BQL_LOCK_GUARD();
     if (mr->subpage && !full->attrs.memory && !(addr & (size - 1))) {
-        mr = memory_region_resolve_subpage(mr, &mr_offset, size);
+        /* The CPU's RCU read-side section protects the subpage FlatView. */
+        mr = memory_region_resolve_subpage(mr, &mr_offset, size, true);
+    }
+    g_autoptr(BQLLockAuto) lock = mr->lockless_io ? NULL :
+        bql_auto_lock(__FILE__, __LINE__);
+    if (mr->subpage && !full->attrs.memory && !(addr & (size - 1))) {
+        mr = memory_region_resolve_subpage(mr, &mr_offset, size, false);
     }
     return int_ld_mmio_beN(cpu, full, ret_be, addr, size, mmu_idx,
                            type, ra, mr, mr_offset);
@@ -1999,7 +2004,8 @@ static Int128 do_ld16_mmio_beN(CPUState *cpu, CPUTLBEntryFull *full,
     section = io_prepare(&mr_offset, cpu, full, addr, ra);
     mr = section->mr;
 
-    BQL_LOCK_GUARD();
+    g_autoptr(BQLLockAuto) lock = mr->lockless_io ? NULL :
+        bql_auto_lock(__FILE__, __LINE__);
     a = int_ld_mmio_beN(cpu, full, ret_be, addr, size - 8, mmu_idx,
                         MMU_DATA_LOAD, ra, mr, mr_offset);
     b = int_ld_mmio_beN(cpu, full, ret_be, addr + size - 8, 8, mmu_idx,
@@ -2494,9 +2500,14 @@ static uint64_t do_st_mmio_leN(CPUState *cpu, CPUTLBEntryFull *full,
     section = io_prepare(&mr_offset, cpu, full, addr, ra);
     mr = section->mr;
 
-    BQL_LOCK_GUARD();
     if (mr->subpage && !full->attrs.memory && !(addr & (size - 1))) {
-        mr = memory_region_resolve_subpage(mr, &mr_offset, size);
+        /* The CPU's RCU read-side section protects the subpage FlatView. */
+        mr = memory_region_resolve_subpage(mr, &mr_offset, size, true);
+    }
+    g_autoptr(BQLLockAuto) lock = mr->lockless_io ? NULL :
+        bql_auto_lock(__FILE__, __LINE__);
+    if (mr->subpage && !full->attrs.memory && !(addr & (size - 1))) {
+        mr = memory_region_resolve_subpage(mr, &mr_offset, size, false);
     }
     return int_st_mmio_leN(cpu, full, val_le, addr, size, mmu_idx,
                            ra, mr, mr_offset);
@@ -2515,7 +2526,8 @@ static uint64_t do_st16_mmio_leN(CPUState *cpu, CPUTLBEntryFull *full,
     section = io_prepare(&mr_offset, cpu, full, addr, ra);
     mr = section->mr;
 
-    BQL_LOCK_GUARD();
+    g_autoptr(BQLLockAuto) lock = mr->lockless_io ? NULL :
+        bql_auto_lock(__FILE__, __LINE__);
     int_st_mmio_leN(cpu, full, int128_getlo(val_le), addr, 8,
                     mmu_idx, ra, mr, mr_offset);
     return int_st_mmio_leN(cpu, full, int128_gethi(val_le), addr + 8,

@@ -2910,7 +2910,7 @@ static bool flatview_access_valid(FlatView *fv, hwaddr addr, hwaddr len,
                                   bool is_write, MemTxAttrs attrs);
 
 MemoryRegion *memory_region_resolve_subpage(MemoryRegion *mr, hwaddr *offset,
-                                           unsigned size)
+                                           unsigned size, bool lockless_only)
 {
     subpage_t *subpage = container_of(mr, subpage_t, iomem);
     AddressSpaceDispatch *d = flatview_to_dispatch(subpage->fv);
@@ -2929,6 +2929,10 @@ MemoryRegion *memory_region_resolve_subpage(MemoryRegion *mr, hwaddr *offset,
     }
     section = &d->map.sections[subpage->sub_section[addr]];
     leaf = section->mr;
+    /* Non-lockless region metadata, such as coalescing, requires BQL. */
+    if (lockless_only && !leaf->lockless_io) {
+        return mr;
+    }
     within = subpage->base + addr - section->offset_within_address_space;
     if (leaf->ram || leaf->rom_device || leaf->is_iommu || leaf->alias ||
         leaf->subpage || leaf->flush_coalesced_mmio || !leaf->ops ||
@@ -2943,10 +2947,12 @@ MemoryRegion *memory_region_resolve_subpage(MemoryRegion *mr, hwaddr *offset,
      * The flatview path must issue exactly this access, and its validation
      * must have no callback side effects. Keep invalid accesses on that path
      * too, including its error reporting and handling of split accesses.
+     * For an aligned power-of-two access, memory_access_size() only reduces
+     * the size when it exceeds the region's maximum (four by default).
      */
     if ((xlat & (size - 1)) ||
         size < leaf->ops->valid.min_access_size ||
-        memory_access_size(leaf, size, xlat) != size) {
+        size > (leaf->ops->valid.max_access_size ?: 4)) {
         return mr;
     }
     *offset = xlat;
