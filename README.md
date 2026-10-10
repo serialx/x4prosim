@@ -142,8 +142,9 @@ x4prosim/drive.py flash.bin sd.img log.txt wait:30 press:down shot:home.png \
 The **X3** (`-machine x3`, `qemu-system-riscv32`): UC8279d or UC8253 792x528
 e-ink, SD card in SPI mode, the six keys on their ADC ladder plus Power,
 BQ27220 gauge, DS3231 clock, QMI8658 IMU, the same Wi-Fi, and deep sleep with
-power-button wake. The panel model is simpler than the X4 Pro's (no ghosting
-or animation). Details in [X4PROSIM.md](X4PROSIM.md).
+power-button wake. The panel uses the X4 Pro's ink and ghosting model,
+including animated refreshes, with X3 waveform decoding and calibrated
+refresh timing. Details in [X4PROSIM.md](X4PROSIM.md).
 
 **Wi-Fi.** Join `PICSimLabWifi` on the device. By default it uses QEMU's NAT:
 the device gets 10.0.2.15, and `curl localhost:8080` reaches its port 80. To

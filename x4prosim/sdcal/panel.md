@@ -53,7 +53,7 @@ and second pair of phases. Its time is
 `group_repeat * ((f0 + f1) * state1_repeat + (f2 + f3) * state2_repeat)`.
 This corrects the former decoder, which multiplied all four phases only by
 byte 6 and could drop a valid later group when its second state was empty.
-The same repeats feed the existing ink movement approximation.
+The same repeats feed the ink model in chronological order.
 
 BUSY uses the longest of all five rows. Equal-row banks cannot establish
 whether silicon waits for VCOM specifically, the longest row, or a common
@@ -90,7 +90,7 @@ UC8253c PDF describes the measured six-byte controller.
 ## Configuration and trace
 
 `-global uc8279.uc8253=false` selects UC8279d, including its generic timing
-defaults (20000 us frames, zero DRF overhead, 2 ms PON/POF). The X3 applies its
+defaults (25000 us frames, zero DRF overhead, 2 ms PON/POF). The X3 applies its
 calibration only when UC8253 is selected. Explicit global properties take
 precedence, including zero values:
 
@@ -104,7 +104,40 @@ precedence, including zero values:
 A nonzero `busy-ms` overrides the complete DRF duration, including overhead.
 Trace `-d trace:uc8279_refresh -D panel.trace` records all five frame totals,
 PLL, and BUSY rounded up to milliseconds; deadlines retain microsecond precision.
-The generic timing properties remain unchanged on other machines.
+
+## Ink and ghosting
+
+X3 uses a copy of the X4 Pro UC8179 ink engine and its default strengths:
+per-frame saturation, fast/slow residual charge, edge blooming, drift,
+L* grayscale mapping, and animated refreshes. The six- and seven-byte X3
+LUT formats are decoded into ordered drive frames, including VCOM, before
+entering that engine. The previous net-movement sum and `dead-frames`
+property are removed. With PSR REG=0, the engine uses the same approximate
+fast/full OTP waveforms as X4 Pro. CDI N2OCP copies NEW to OLD once the
+refresh's pixel classes are latched.
+
+The calibrated UC8253 BUSY timing above is retained. Animation and charge
+integration use its PLL-scaled frame period. UC8279d's generic `frame-us`
+default is now 25000 to match X4 Pro; its former default was 20000.
+`-global uc8279.animate=false` runs the same frames immediately.
+The existing turbo setting `frame-us=0` also renders immediately, using a
+1 us ink step to keep animation arithmetic finite.
+
+Ink parameters use the same names as [the X4 Pro model](../ghosting/README.md),
+under `-global uc8279.<property>=<value>`. Current OTP defaults are 10 fast
+frames, 30 full frames per direction, and a held-pixel drive of 6 per mille.
+These strengths were copied from X4 Pro, not fitted to X3 device photos.
+
+Run `python3 -m unittest x4prosim.tests.test_panel_ink` to compare the actual
+C ink functions with X4 Pro and check LUT ordering, clearing, animation,
+turbo mode, and the four calibrated BUSY durations. The harness uses a small
+panel and clock/timer stubs, with address and undefined-behavior sanitizers.
+
+Native verification of this change built both `qemu-system-riscv32` and
+`qemu-system-xtensa`. CrossPoint 1.6.5 booted and rendered three successive
+text-book pages on UC8253, UC8279d, and UC8253 with zero-period turbo
+overrides. The UC8253 captures were clean; UC8279d retained faint residue
+with the copied settings. This is emulator validation, not a device fit.
 
 ## Emulator validation
 
@@ -147,10 +180,11 @@ All five requested timing checks pass the 5% tolerance. The raw
 [firmware log](session evidence) and [per-row trace](session evidence) are
 checked in. The logs were captured before the provisional PLL mapping was
 refined; both versions give identical periods at the exercised `0x09` code.
-The screenshot below is the actual emulated panel console captured through
+The screenshot below predates the copied X4 Pro ink model. It is the
+emulated panel console captured through
 QEMU's monitor after Home settled. Home, Browse Files, and Aesop remain readable;
-the existing simplified ink approximation can retain gray image residue on
-later pages and is not calibrated by this timing work.
+the former simplified ink approximation retained gray image residue on
+later pages. This timing work did not calibrate optical behavior.
 
 ![UC8253 Home screen](session evidence)
 

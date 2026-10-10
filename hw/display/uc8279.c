@@ -12,12 +12,13 @@
  * Modeled: PSR (0x00) REG bit, TRES (0x61), the partial window (0x90, 9
  * bytes) with PTIN/PTOUT (0x91/0x92), DTM1 (0x10, OLD) and DTM2 (0x13, NEW)
  * written inside the window (or the TRES frame), the register LUTs 0x20-0x24
- * and DRF (0x12). A refresh runs the LUT per pixel class (OLD, NEW bits ->
- * WW/KW/WK/KK row): every phase of VDH moves the ink toward black and of VDL
- * toward white by (frames - "dead-frames") / "swing-frames" of the way, so a
- * one-frame balance pulse does nothing and a 26-frame phase saturates; REG=0
- * (no waveform in this module's MTP) just shows NEW. BUSY_N is low for the
- * longest of VCOM and the four transition rows, plus refresh-overhead-us.
+ * and DRF (0x12). Ink, ghosting, grayscale mapping, OTP stand-ins and
+ * animation use the X4 Pro UC8179 model: ordered per-frame saturation,
+ * fast/slow remnant charge, blooming and drift, with identical defaults.
+ * X3 LUTs are decoded in group/state/phase order, including VCOM drive.
+ * CDI (0x50) N2OCP copies NEW to OLD after the refresh is latched.
+ * BUSY_N is low for the longest of VCOM and the four transition rows,
+ * plus refresh-overhead-us.
  * The measured X3 banks have equal row lengths: they do NOT establish which
  * row gates BUSY on silicon. Taking the maximum also handles a longer VCOM.
  * UC8253 groups have 6 bytes (levels, four frame counts, repeat count).
@@ -39,6 +40,8 @@
  * (at your option) any later version.
  */
 #include "qemu/osdep.h"
+#include <math.h>
+#include "qemu/log.h"
 #include "qapi/error.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
@@ -60,7 +63,18 @@ OBJECT_DECLARE_SIMPLE_TYPE(Uc8279State, UC8279)
 #define LUT_ROWS 5
 #define LUT_LEN 64
 #define PSR_REG 0x20
-#define SHADES 256
+#define CDI_N2OCP 0x08
+#define MAX_FRAMES 8192
+#define SHADES 1024
+#define L_WHITE 94.5f
+#define L_BLACK 4.7f
+
+/* Same particle and charge state as the X4 Pro UC8179 model. */
+typedef struct Uc8279Ink {
+    float p;
+    float qf, qs;
+    float t_drive;
+} Uc8279Ink;
 
 enum { PLANE_OLD, PLANE_NEW };
 
@@ -70,6 +84,11 @@ struct Uc8279State {
     qemu_irq busy_n;
     qemu_irq sda_out;
     QEMUTimer busy_timer;
+    QEMUTimer anim_timer;
+    bool animate;
+    int anim_f, anim_n;
+    double anim_t0;
+    uint32_t anim_frame_us; /* PLL-scaled period latched for this refresh */
     bool uc8253;
     bool portrait;
     uint32_t busy_ms;       /* fixed DRF BUSY time; 0 = the LUT's frames */
@@ -78,7 +97,13 @@ struct Uc8279State {
     uint32_t pon_ms;
     uint32_t pof_ms;
     uint8_t swing;          /* frames of drive for a full black <-> white swing */
-    uint8_t dead;           /* frames of a phase that don't move the ink */
+    uint32_t rail_soft;
+    uint8_t otp_fast_frames, otp_full_frames;
+    uint32_t otp_hold_drive;
+    uint32_t remnant_fast, remnant_fast_ms;
+    uint32_t remnant_slow, remnant_slow_ms;
+    uint32_t bloom;
+    uint32_t drift, drift_s;
 
     bool dc;
     bool in_reset;
@@ -88,6 +113,7 @@ struct Uc8279State {
     uint32_t pos;           /* byte index into the data of the current command */
     int64_t plane_start_ns;
     uint8_t psr;
+    uint8_t cdi;
     uint8_t pll;
     uint16_t tres_w, tres_h;
     bool partial;
@@ -105,7 +131,11 @@ struct Uc8279State {
     uint32_t rd_len;
 
     uint8_t ram[2][RAM_H][RAM_WB];
-    float *ink;             /* H x W, 0 black .. 1 white */
+    Uc8279Ink *ink;
+    uint8_t cls[H][W];
+    float (*frames)[4];
+    double t_refresh, t_drift;
+    uint8_t shade[SHADES + 1];
     bool redraw;
 };
 
@@ -125,68 +155,91 @@ static void uc8279_busy_done(void *opaque)
     qemu_set_irq(s->busy_n, 1);
 }
 
-/*
- * Returns the row's frame count and net ink movement, repeats included.
- * rail: 0 GND, 1 VDH, 2 VDL, 3 VDHR (not modeled by the ink approximation).
- */
-static int uc8279_lut_walk(Uc8279State *s, int r, float *move)
+/* Decode timing without truncating it to the ink engine's frame limit. */
+static int uc8279_row_frames(Uc8279State *s, int r)
 {
-    const uint8_t *row = s->lut[r];
-    int n = s->lut_n[r], total = 0;
-    int gsize = s->uc8253 ? 6 : 7;
+    int total = 0, size = s->uc8253 ? 6 : 7;
 
-    *move = 0;
-    for (int g = 0; g + gsize <= n; g += gsize) {
-        const uint8_t *grp = row + g;
+    for (int g = 0; g + size <= s->lut_n[r]; g += size) {
+        const uint8_t *p = s->lut[r] + g;
         for (int ph = 0; ph < 4; ph++) {
-            int rail, f, rep;
-            if (s->uc8253) {
-                rail = (grp[0] >> (6 - 2 * ph)) & 3;
-                f = grp[1 + ph];
-                rep = grp[5];
-            } else {
-                rail = grp[1 + ph] >> 6;
-                f = grp[1 + ph] & 0x3f;
-                rep = grp[0] * grp[5 + ph / 2];
-            }
-            total += f * rep;
-            if (f > s->dead && (rail == 1 || rail == 2)) {
-                *move += (rail == 2 ? 1.0f : -1.0f) *
-                         (f - s->dead) / s->swing * rep;
-            }
+            int frames = s->uc8253 ? p[1 + ph] : p[1 + ph] & 0x3f;
+            int repeat = s->uc8253 ? p[5] : p[0] * p[5 + ph / 2];
+            total += frames * repeat;
         }
     }
     return total;
 }
 
-/* Runs the refresh over the glass; returns its frame count. */
-static int uc8279_refresh(Uc8279State *s, int row_frames[LUT_ROWS])
+/* Resolve a frame in chronological group/state/phase repeat order. */
+static int uc8279_lut_level(Uc8279State *s, int r, int frame)
 {
-    static const int row_of[4] = { 4, 2, 3, 1 };    /* class OLD<<1|NEW: KK, KW, WK, WW */
-    float move[LUT_ROWS] = { 0 };
-    int frames = 0;
-    bool lut = s->psr & PSR_REG;
+    int size = s->uc8253 ? 6 : 7;
 
-    for (int r = 0; r < LUT_ROWS; r++) {
-        row_frames[r] = lut ? uc8279_lut_walk(s, r, &move[r]) : 0;
-        frames = MAX(frames, row_frames[r]);
-    }
-    /* The driver streams framebuffer row H-1-i into RAM row i. */
-    for (int y = 0; y < H; y++) {
-        int r = H - 1 - y;
-        for (int x = 0; x < W; x++) {
-            int o = (s->ram[PLANE_OLD][r][x / 8] >> (7 - x % 8)) & 1;
-            int nw = (s->ram[PLANE_NEW][r][x / 8] >> (7 - x % 8)) & 1;
-            float *p = &s->ink[y * W + x];
-            if (lut) {
-                *p = MIN(1.0f, MAX(0.0f, *p + move[row_of[o << 1 | nw]]));
-            } else {
-                *p = nw;
+    for (int g = 0; g + size <= s->lut_n[r]; g += size) {
+        const uint8_t *p = s->lut[r] + g;
+        int f[4], cycle, total;
+
+        for (int ph = 0; ph < 4; ph++) {
+            f[ph] = s->uc8253 ? p[1 + ph] : p[1 + ph] & 0x3f;
+        }
+        cycle = s->uc8253 ? f[0] + f[1] + f[2] + f[3] :
+                (f[0] + f[1]) * p[5] + (f[2] + f[3]) * p[6];
+        total = cycle * (s->uc8253 ? p[5] : p[0]);
+        if (frame >= total) {
+            frame -= total;
+            continue;
+        }
+        frame %= cycle;
+        if (s->uc8253) {
+            for (int ph = 0; ph < 4; ph++) {
+                if (frame < f[ph]) {
+                    return (p[0] >> (6 - 2 * ph)) & 3;
+                }
+                frame -= f[ph];
             }
+        } else {
+            int pair = frame < (f[0] + f[1]) * p[5] ? 0 : 2;
+            if (pair) {
+                frame -= (f[0] + f[1]) * p[5];
+            }
+            frame %= f[pair] + f[pair + 1];
+            return p[1 + pair + (frame >= f[pair])] >> 6;
         }
     }
-    s->redraw = true;
-    return lut ? frames : 40;
+    return 0;
+}
+
+/* X3 LUT encodings feed the same per-class drive as the UC8179 engine. */
+static int uc8279_lut_frames(Uc8279State *s, int row_frames[LUT_ROWS])
+{
+    static const int level[4] = { 0, 1, -1, 0 };
+    static const int row_of[4] = { 4, 2, 3, 1 };
+    int frames = 0;
+    bool vdhr = false;
+
+    for (int r = 0; r < LUT_ROWS; r++) {
+        row_frames[r] = uc8279_row_frames(s, r);
+        frames = MAX(frames, row_frames[r]);
+    }
+    if (frames > MAX_FRAMES) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "uc8279: LUT over %d frames, cut ink playback\n",
+                      MAX_FRAMES);
+    }
+    s->anim_n = MIN(frames, MAX_FRAMES);
+    for (int f = 0; f < s->anim_n; f++) {
+        int vcom = uc8279_lut_level(s, 0, f);
+        for (int k = 0; k < 4; k++) {
+            int source = uc8279_lut_level(s, row_of[k], f);
+            vdhr |= source == 3;
+            s->frames[f][k] = level[vcom] - level[source];
+        }
+    }
+    if (vdhr) {
+        qemu_log_mask(LOG_UNIMP, "uc8279: VDHR in a LUT row not modeled\n");
+    }
+    return frames;
 }
 
 static unsigned uc8279_pll_hz(bool uc8253, uint8_t pll)
@@ -202,18 +255,201 @@ static unsigned uc8279_pll_hz(bool uc8253, uint8_t pll)
     return frs < 24 ? 5 * (frs + 1) : 130 + 10 * (frs - 24);
 }
 
-static uint64_t uc8279_refresh_us(Uc8279State *s, unsigned frames)
+static uint32_t uc8279_frame_us(Uc8279State *s)
 {
     unsigned ref_hz = uc8279_pll_hz(s->uc8253, s->uc8253 ? 0x09 : 0x0f);
     uint64_t period = DIV_ROUND_UP((uint64_t)s->frame_us * ref_hz,
                                   uc8279_pll_hz(s->uc8253, s->pll));
+
+    return MIN(period, UINT32_MAX);
+}
+
+static uint64_t uc8279_refresh_us(Uc8279State *s, unsigned frames)
+{
     uint64_t us;
 
     if (s->busy_ms) {
         return (uint64_t)s->busy_ms * 1000;
     }
-    us = (uint64_t)frames * MIN(period, UINT32_MAX) + s->refresh_overhead_us;
+    us = (uint64_t)frames * uc8279_frame_us(s) + s->refresh_overhead_us;
     return MIN(MAX(us, 1), (uint64_t)UINT32_MAX * 1000);
+}
+
+static double uc8279_now(void)
+{
+    return qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) / 1e9;
+}
+
+/* Stand-in OTP waveforms; returns the frame count. */
+static int uc8279_otp_frames(Uc8279State *s)
+{
+    int n = 0;
+
+    if (s->partial) {
+        float h = s->otp_hold_drive / 1000.0f;
+        for (int i = 0; i < s->otp_fast_frames; i++, n++) {
+            memcpy(s->frames[n], (float[4]) { -h, 1, -1, h },
+                   sizeof(s->frames[n]));
+        }
+    } else {
+        for (int i = 0; i < 2 * s->otp_full_frames; i++, n++) {
+            float to_new = i < s->otp_full_frames ? -1 : 1;
+            memcpy(s->frames[n],
+                   (float[4]) { -to_new, to_new, -to_new, to_new },
+                   sizeof(s->frames[n]));
+        }
+    }
+    return n;
+}
+
+/*
+ * Moves position p by a (in swings; + toward white). Linear until "sigma"
+ * short of the rail it moves toward, then an exponential approach.
+ */
+static inline float ink_move(float p, float a, float sigma)
+{
+    float x = a > 0 ? 1 - p : p, d = fabsf(a);
+
+    if (sigma <= 0) {
+        x = MAX(x - d, 0);
+    } else if (x - d >= sigma) {
+        x -= d;
+    } else {
+        float lin = MAX(x - sigma, 0);
+        x = MIN(x, sigma) * expf(-(d - lin) / sigma);
+    }
+    return a > 0 ? 1 - x : x;
+}
+
+/* Drift toward mid gray; optionally leak charge since the last refresh. */
+static void uc8279_relax(Uc8279State *s, double now, bool leak)
+{
+    float rf = s->remnant_fast_ms ?
+        expf(-(now - s->t_refresh) * 1e3 / s->remnant_fast_ms) : 0;
+    float rs = s->remnant_slow_ms ?
+        expf(-(now - s->t_refresh) * 1e3 / s->remnant_slow_ms) : 0;
+    bool drift = s->drift && s->drift_s && now > s->t_drift;
+    float amt = s->drift / 1000.0f, tau = s->drift_s;
+
+    for (int i = 0; i < H * W; i++) {
+        Uc8279Ink *k = &s->ink[i];
+        if (leak) {
+            k->qf *= rf;
+            k->qs *= rs;
+        }
+        if (drift) {
+            /* dp/dt = (1/2 - p) amt/tau e^(-age/tau): at most amt of the way */
+            float pull = amt * (expf(-(s->t_drift - k->t_drive) / tau) -
+                                expf(-(now - k->t_drive) / tau));
+            k->p += (0.5f - k->p) * pull;
+        }
+    }
+    s->t_drift = now;
+}
+
+/* Runs refresh frame f over the whole panel. */
+static void uc8279_run_frame(Uc8279State *s, int f)
+{
+    float dt = s->anim_frame_us / 1e6f, step = 1.0f / s->swing;
+    float sigma = s->rail_soft / 1000.0f, bloom = s->bloom / 1000.0f;
+    float kf = s->remnant_fast_ms ? expf(-dt * 1e3f / s->remnant_fast_ms) : 0;
+    float ks = s->remnant_slow_ms ? expf(-dt * 1e3f / s->remnant_slow_ms) : 0;
+    float gf = s->remnant_fast_ms ?
+        s->remnant_fast * 1.0f / s->remnant_fast_ms : 0;
+    float gs = s->remnant_slow_ms ?
+        s->remnant_slow * 1.0f / s->remnant_slow_ms : 0;
+    float t = s->anim_t0 + f * dt;
+    const float *e = s->frames[f];
+    bool edges = bloom && (e[0] != e[1] || e[0] != e[2] || e[0] != e[3]);
+
+    for (int y = 0; y < H; y++) {
+        const uint8_t *c = s->cls[y];
+        for (int x = 0; x < W; x++) {
+            Uc8279Ink *k = &s->ink[y * W + x];
+            float d = e[c[x]];
+            bool driven = fabsf(d) >= 0.5f;
+            if (edges && driven) {
+                float nb = 0;
+                nb += x > 0 ? e[c[x - 1]] - e[c[x]] : 0;
+                nb += x < W - 1 ? e[c[x + 1]] - e[c[x]] : 0;
+                nb += y > 0 ? e[s->cls[y - 1][x]] - e[c[x]] : 0;
+                nb += y < H - 1 ? e[s->cls[y + 1][x]] - e[c[x]] : 0;
+                d += bloom * nb;
+            }
+            /* field = fraction / tau * charge; per mille / ms = 1 / s */
+            float a = d - gf * k->qf - gs * k->qs;
+            k->qf = k->qf * kf + d * dt;
+            k->qs = k->qs * ks + d * dt;
+            if (a != 0) {
+                k->p = ink_move(k->p, a * step, sigma);
+            }
+            if (driven) {
+                k->t_drive = t;
+            }
+        }
+    }
+    s->redraw = true;
+}
+
+/* Runs the frames due by virtual time "now" (all of them if now < 0). */
+static void uc8279_run_frames(Uc8279State *s, double now)
+{
+    double dt = s->anim_frame_us / 1e6;
+    int due = now < 0 ? s->anim_n :
+        MIN(s->anim_n, (int)((now - s->anim_t0) / dt + 0.000001));
+
+    while (s->anim_f < due) {
+        uc8279_run_frame(s, s->anim_f++);
+    }
+    if (s->anim_f == s->anim_n) {
+        timer_del(&s->anim_timer);
+        s->t_refresh = s->t_drift = s->anim_t0 + s->anim_n * dt;
+    } else {
+        /* Rounding down can rearm an expired timer before a frame is due. */
+        int64_t deadline = ceil((s->anim_t0 + (s->anim_f + 1) * dt) * 1e9);
+
+        timer_mod(&s->anim_timer,
+                  MAX(deadline, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 1));
+    }
+}
+
+static void uc8279_anim_tick(void *opaque)
+{
+    Uc8279State *s = opaque;
+    uc8279_run_frames(s, uc8279_now());
+}
+
+/* Start the copied ink engine using X3 waveform and BUSY timing. */
+static int uc8279_refresh(Uc8279State *s, int row_frames[LUT_ROWS])
+{
+    double now = uc8279_now();
+    int frames;
+
+    uc8279_run_frames(s, -1);
+    uc8279_relax(s, now, now > s->t_refresh);
+    for (int y = 0; y < H; y++) {
+        int r = H - 1 - y;
+        for (int x = 0; x < W; x++) {
+            int o = (s->ram[PLANE_OLD][r][x / 8] >> (7 - x % 8)) & 1;
+            int nw = (s->ram[PLANE_NEW][r][x / 8] >> (7 - x % 8)) & 1;
+            s->cls[y][x] = o << 1 | nw;
+        }
+    }
+    if (s->psr & PSR_REG) {
+        frames = uc8279_lut_frames(s, row_frames);
+    } else {
+        memset(row_frames, 0, sizeof(int) * LUT_ROWS);
+        frames = s->anim_n = uc8279_otp_frames(s);
+    }
+    s->anim_f = 0;
+    s->anim_t0 = now;
+    /* A zero period is the existing X3 turbo setting: render synchronously. */
+    s->anim_frame_us = MAX(1, uc8279_frame_us(s));
+    if (s->cdi & CDI_N2OCP) {
+        memcpy(s->ram[PLANE_OLD], s->ram[PLANE_NEW], sizeof(s->ram[PLANE_NEW]));
+    }
+    uc8279_run_frames(s, s->animate && s->frame_us ? now : -1);
+    return frames;
 }
 
 static void uc8279_set_window(Uc8279State *s, int xs, int xe, int ys, int ye)
@@ -273,6 +509,11 @@ static void uc8279_command(Uc8279State *s, uint8_t c)
 static void uc8279_data(Uc8279State *s, uint8_t v)
 {
     switch (s->cmd) {
+    case 0x50:
+        if (s->pos++ == 0) {
+            s->cdi = v;
+        }
+        break;
     case 0x30:
         if (s->pos++ == 0) {
             s->pll = v & (s->uc8253 ? 0x0f : 0x1f);
@@ -437,6 +678,7 @@ static int uc8279_set_cs(SSIPeripheral *dev, bool level)
 static void uc8279_reset_regs(Uc8279State *s)
 {
     s->psr = 0x0F;
+    s->cdi = 0x31;
     s->pll = s->uc8253 ? 0x09 : 0x0f;
     s->partial = false;
     s->tres_w = RAM_W;
@@ -465,7 +707,12 @@ static bool uc8279_update_display(void *opaque)
 {
     Uc8279State *s = opaque;
     DisplaySurface *surface = qemu_console_surface(s->con);
+    double now = uc8279_now();
 
+    if (s->drift && s->drift_s && now - s->t_drift >= 1.0) {
+        uc8279_relax(s, now, false);
+        s->redraw = true;
+    }
     if (!s->redraw) {
         return true;
     }
@@ -474,8 +721,8 @@ static bool uc8279_update_display(void *opaque)
     int stride = surface_stride(surface) / 4;
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            /* panel white is a light gray, black a dark one */
-            uint8_t g = 0x10 + (int)(s->ink[y * W + x] * 0xE0 + 0.5f);
+            float p = MIN(1.0f, MAX(0.0f, s->ink[y * W + x].p));
+            uint8_t g = s->shade[(int)(p * SHADES + 0.5f)];
             int dx = s->portrait ? H - 1 - y : x, dy = s->portrait ? x : y;
             d[dy * stride + dx] = rgb_to_pixel32(g, g, g);
         }
@@ -505,15 +752,26 @@ static void uc8279_realize(SSIPeripheral *d, Error **errp)
         return;
     }
     memset(s->ram, 0xff, sizeof(s->ram));
-    s->ink = g_new(float, H * W);
+    s->ink = g_new0(Uc8279Ink, H * W);
     for (int i = 0; i < H * W; i++) {
-        s->ink[i] = 1;
+        s->ink[i].p = 1;
+    }
+    s->frames = g_malloc(MAX_FRAMES * sizeof(*s->frames));
+    /* position -> L* (linear) -> sRGB */
+    for (int i = 0; i <= SHADES; i++) {
+        float l = L_BLACK + (L_WHITE - L_BLACK) * i / SHADES;
+        float y = l > 8 ? powf((l + 16) / 116, 3) : l / 903.3f;
+        float v = y <= 0.0031308f ? 12.92f * y :
+            1.055f * powf(y, 1 / 2.4f) - 0.055f;
+        s->shade[i] = MIN(255, (int)(v * 255 + 0.5f));
     }
     uc8279_reset_regs(s);
+    s->anim_frame_us = MAX(1, uc8279_frame_us(s));
     s->redraw = true;
     s->con = qemu_graphic_console_create(dev, 0, &uc8279_ops, s);
     qemu_console_resize(s->con, s->portrait ? H : W, s->portrait ? W : H);
     timer_init_us(&s->busy_timer, QEMU_CLOCK_VIRTUAL, uc8279_busy_done, s);
+    timer_init_ns(&s->anim_timer, QEMU_CLOCK_VIRTUAL, uc8279_anim_tick, s);
     qdev_init_gpio_in_named(dev, uc8279_set_dc, "dc", 1);
     qdev_init_gpio_in_named(dev, uc8279_set_rst, "rst", 1);
     qdev_init_gpio_in_named(dev, uc8279_set_sclk, "sclk", 1);
@@ -526,13 +784,24 @@ static const Property uc8279_properties[] = {
     DEFINE_PROP_BOOL("uc8253", Uc8279State, uc8253, false),
     DEFINE_PROP_BOOL("portrait", Uc8279State, portrait, true),
     DEFINE_PROP_UINT32("busy-ms", Uc8279State, busy_ms, 0),
-    DEFINE_PROP_UINT32("frame-us", Uc8279State, frame_us, 20000),
+    DEFINE_PROP_UINT32("frame-us", Uc8279State, frame_us, 25000),
     DEFINE_PROP_UINT32("refresh-overhead-us", Uc8279State,
                        refresh_overhead_us, 0),
     DEFINE_PROP_UINT32("pon-ms", Uc8279State, pon_ms, 2),
     DEFINE_PROP_UINT32("pof-ms", Uc8279State, pof_ms, 2),
     DEFINE_PROP_UINT8("swing-frames", Uc8279State, swing, 6),
-    DEFINE_PROP_UINT8("dead-frames", Uc8279State, dead, 1),
+    DEFINE_PROP_BOOL("animate", Uc8279State, animate, true),
+    DEFINE_PROP_UINT32("rail-soft", Uc8279State, rail_soft, 100),
+    DEFINE_PROP_UINT8("otp-fast-frames", Uc8279State, otp_fast_frames, 10),
+    DEFINE_PROP_UINT8("otp-full-frames", Uc8279State, otp_full_frames, 30),
+    DEFINE_PROP_UINT32("otp-hold-drive", Uc8279State, otp_hold_drive, 6),
+    DEFINE_PROP_UINT32("remnant-fast", Uc8279State, remnant_fast, 30),
+    DEFINE_PROP_UINT32("remnant-fast-ms", Uc8279State, remnant_fast_ms, 1000),
+    DEFINE_PROP_UINT32("remnant-slow", Uc8279State, remnant_slow, 10),
+    DEFINE_PROP_UINT32("remnant-slow-ms", Uc8279State, remnant_slow_ms, 30000),
+    DEFINE_PROP_UINT32("bloom", Uc8279State, bloom, 35),
+    DEFINE_PROP_UINT32("drift", Uc8279State, drift, 50),
+    DEFINE_PROP_UINT32("drift-s", Uc8279State, drift_s, 1800),
 };
 
 static void uc8279_class_init(ObjectClass *klass, const void *data)

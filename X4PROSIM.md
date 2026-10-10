@@ -598,15 +598,22 @@ Notes:
   `--trace 'enable=ssi_sd_*' --trace 'enable=esp32s3_gpspi_*'`.
   Setting all card latency properties to zero disables only card delays;
   transfers still consume their wire time and configured GPSPI setup time.
-- The panel model is simpler than the UC8179's: register LUTs move the ink per
-  phase ((frames - `dead-frames`) / `swing-frames` of the way, so a one-frame
-  balance pulse does nothing), without animation or ghosting. The partial
-  window (0x90) and TRES are honored. BUSY uses the longest of VCOM and the four
+- The panel uses the UC8179's full ink model and default strengths: per-frame
+  saturation, fast/slow remnant charge, blooming, drift, L* grayscale mapping,
+  OTP waveform approximations, and animation. X3's six- and seven-byte LUTs
+  are decoded in phase/repeat order and include VCOM drive. The former
+  `dead-frames` approximation is removed. CDI N2OCP copies NEW to OLD after
+  latching a refresh. The partial window (0x90) and TRES constrain RAM writes.
+  BUSY uses the longest of VCOM and the four
   transition rows, with a fixed refresh overhead. X3 UC8253 defaults are
   `frame-us=12850`, `refresh-overhead-us=138000`, `pon-ms=127`, `pof-ms=2`:
   fast 382 ms, grayscale pre-BW 485 ms, gray 228 ms, full 935 ms. Every setting
   accepts a `-global uc8279.<property>=<value>` override; `busy-ms` fixes DRF
-  duration when nonzero. UC8279d retains generic 20000/0/2/2 defaults.
+  duration when nonzero. UC8279d uses 25000/0/2/2 defaults; its generic frame
+  period now matches the UC8179. The UC8253 machine timing remains calibrated.
+  `animate=false` applies the same ink simulation immediately. `frame-us=0`
+  also renders immediately for X3 turbo mode, using a 1 us ink step.
+  The copied ghosting strengths have not been fitted to X3 device photos.
   PLL (0x30) scales the frame period relative to the driver's init value
   (0x09 UC8253, 0x0f UC8279d); its family-table mapping remains provisional.
   Trace per-row totals with `-d trace:uc8279_refresh -D panel.trace`.
